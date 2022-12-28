@@ -5,5 +5,5 @@ variant Token:
   FOO
 
 niml a[Token]:
-  r"\:":
+  r":":
     return FOO()
