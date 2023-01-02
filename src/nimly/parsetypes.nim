@@ -69,7 +69,7 @@ proc TermS*[T](term: T): Symbol[T] =
   return Symbol[T](kind: SymbolKind.TermS, term: term)
 
 proc `$`*[T](ft: FollowTable[T]): string =
-  result = "FollowTable:\n--------\n"
+  result = "\n--------\n"
   for i, itms in ft:
     result = result & $i & ":" & $itms & "\n"
   result = result & "--------\n"

@@ -61,13 +61,11 @@ proc closure[T](g: Grammar[T], whole: LALRItems[T]): LALRItems[T] =
       match i.next:
         NonTermS:
           for r in g.filterRulesLeftIs(i.next):
-            when defined(nimydebug):
-              if i.ahead.kind == SymbolKind.Empty:
-                echo "(ahead is emp) i: " & $i
+            doAssert i.ahead.kind != SymbolKind.Empty, "Lookahead is EMPTY (epsilon)"
             for fst in g.calFirsts(i.fromNextNext & i.ahead):
-              when defined(nimydebug):
-                if fst.kind == SymbolKind.Empty:
-                  echo "(gen emp fst) i: " & $i
+              # for each terminal b in FIRST(βa), dragonbook fig. 4.40
+              if fst.kind == SymbolKind.Empty:
+                continue 
               let n = LALRItem[T](rule: r, pos: 0, ahead: fst)
               if not result.containsOrIncl(n):
                 new.incl(n)
@@ -91,7 +89,7 @@ proc `[]`[T](pt: PropagateTable[T],
 proc incl[T](ot: var OrderedTable[int, T], vl: T) =
   ot[ot.len] = vl
 
-proc foward[T](itm: LALRItem[T]): LALRItem[T] =
+proc forward[T](itm: LALRItem[T]): LALRItem[T] =
   result = LALRItem[T](rule: itm.rule, pos: itm.pos + 1, ahead: itm.ahead)
 
 proc firstItem[T](os: OrderedSet[T]): T =
@@ -136,9 +134,9 @@ proc toLALRKernel[T](lrKernel: SetOfLRItems[T], g: Grammar[T],
           if ci.next != End[T]():
             propagation[itm] = (propagation[itm] +
                                 [(tt[idx][ci.next],
-                                  ci.foward.toLRItem)].toHashSet)
+                                  ci.forward.toLRItem)].toHashSet)
         else:
-          let prpgtd = ci.foward
+          let prpgtd = ci.forward
           assert tt[idx][ci.next] < lrKernel.card
           result[tt[idx][ci.next]].incl(prpgtd)
           checkSet.incl(prpgtd)
@@ -147,7 +145,9 @@ proc toLALRKernel[T](lrKernel: SetOfLRItems[T], g: Grammar[T],
   while checkSet.card > 0:
     var newSet = initLALRItems[T]()
     for itm in checkSet:
-      for toInfo in propagation[itm]:
+      # propagation[itm] where itm is a LALRItem works because we 
+      # snuck in a `[]` proc above, very sneaky and confusing. 
+      for toInfo in propagation[itm]: 
         let
           (idx, toItm) = toInfo
           new = toItm.toLALRItem(itm.ahead)
