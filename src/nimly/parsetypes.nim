@@ -13,9 +13,9 @@ type
   SymbolKind* {.pure.} = enum
     TermS
     NonTermS
-    Dummy
-    End
-    Empty
+    Dummy # '#' in dragon book for computing propagated lookahead 
+    End   # '$' endmarker in dragon book. 
+    Empty # epsilon 
   Symbol*[T] = object
     case kind*: SymbolKind
     of SymbolKind.TermS:
@@ -146,14 +146,12 @@ proc startRule*[T](g: Grammar[T]): Rule[T] =
     result = r
 
 proc symbolSet*[T](g: Grammar[T]): HashSet[Symbol[T]] =
-  result.init()
   for r in g.rules: # TODO assumes rhs are reachable from start. Add validation
     for s in r.right:
       result.incl(s)
   result.incl(g.start)
 
 proc nonTermSymbolSet*[T](g: Grammar[T]): HashSet[Symbol[T]] =
-  result.init()
   for r in g.rules:
     for s in r.right: # TODO assumes rhs reachable from start. Add validation. 
       if s.kind == SymbolKind.NonTermS:
@@ -172,16 +170,15 @@ proc makeFirstTable[T](g: Grammar[T]): FirstTable[T] =
   for s in g.symbolSet:
     match s:
       NonTermS:
-        var initHashSet: HashSet[Symbol[T]]
-        initHashSet.init()
-        result[s] = initHashSet
+        result[s] = initHashSet[Symbol[T]]()
       TermS:
         result[s] = [s].toHashSet
-      Empty:
+      Empty: # shows up if Empty is on the rhs of some X -> Y1...Yk 
         result[s] = [s].toHashSet
       _:
         doAssert false, "There is a non-symbol in rules."
 
+  # X -> epsilon, include empty for FIRST(X)
   for r in g.rules:
     if r.right.len == 0:
       result[r.left].incl(Empty[T]())
@@ -189,17 +186,19 @@ proc makeFirstTable[T](g: Grammar[T]): FirstTable[T] =
   var fCnt = true
   while fCnt:
     fCnt = false
+    # convoluted loop to go through rhs left to right for each production. 
     for r in g.rules:
       var fEmp = true
       for s in r.right:
+        # add any terminals we have for this. 
         let newFst = result[r.left] + (result[s] - [Empty[T]()].toHashSet)
         if result[r.left] != newFst:
           fCnt = true
         result[r.left] = newFst
-        if not result[s].contains(Empty[T]()):
+        if not result[s].contains(Empty[T]()): # Yi is not nullable. 
           fEmp = false
           break
-      if fEmp:
+      if fEmp: # X -> Y1...Yk and all Y1...Yk are nullable. 
         if not result[r.left].containsOrIncl(Empty[T]()):
           fCnt = true
 
@@ -207,9 +206,8 @@ proc makeFollowTable[T](g: Grammar[T]): FollowTable[T] =
   doAssert g.firstTable.len != 0, "firstTable is nill."
   result = initTable[Symbol[T], HashSet[Symbol[T]]]()
   for s in g.nonTermSymbolSet:
-    var initHashSet: HashSet[Symbol[T]]
-    initHashSet.init()
-    result[s] = initHashSet
+    result[s] = initHashSet[Symbol[T]]()
+  # place $ in FOLLOW(S). 
   result[g.start].incl(End[T]())
   var fCnt = true
   while fCnt:
@@ -217,12 +215,14 @@ proc makeFollowTable[T](g: Grammar[T]): FollowTable[T] =
     for r in g.rules:
       var
         fEmpTail = true
-        firstSyms: HashSet[Symbol[T]]
-      firstSyms.init()
-      # for sym in r.right.reversed
+        # firstSyms is the first tokens of the last processed rhs symbol 
+        # (we process rhs symbols right to left)
+        firstSyms: HashSet[Symbol[T]] 
+      
       for i in countdown(r.right.len - 1, 0):
         let sym = r.right[i]
         assert sym != End[T]()
+        # A -> aBb, everything in FIRST(b)-{Empty} is in FOLLOW(B)
         match sym:
           TermS:
             # renew meta data
@@ -237,6 +237,8 @@ proc makeFollowTable[T](g: Grammar[T]): FollowTable[T] =
               fCnt = (not result[sym].containsOrIncl(f))
               fCnt = fCnt or prevFC
             if fEmpTail:
+              # A -> aB or A -> aBb with nullable(b), 
+              # all of FOLLOW(A) is in FOLLOW(B)
               for f in result[r.left]:
                 let prevFC = fCnt
                 fCnt = (not result[sym].containsOrincl(f))
@@ -244,6 +246,8 @@ proc makeFollowTable[T](g: Grammar[T]): FollowTable[T] =
 
             # renew meta data
             let fsts = g.firstTable[sym]
+            # decide if extend or replace firstSym depending on if 
+            # the current symbol is nullable. 
             if fsts.contains(Empty[T]()):
               for f in fsts:
                 firstSyms.incl(f)
@@ -275,6 +279,7 @@ proc calFirsts*[T](g: Grammar[T],
         let firsts = g.firstTable[s]
         result.incl(firsts)
         if not (Empty[T]() in firsts):
+          # first non-nullable symbol, end loop. 
           return
       TermS:
         result.incl(s)
@@ -288,8 +293,5 @@ proc calFirsts*[T](g: Grammar[T],
       Empty:
         raise newException(
           NimyError,
-          "Unexpected Empty Rule: Ambiguous rules for parse empty sequent " &
-          "cannot be used in nimy.\n" &
-          "Check your grammer has no ambiguous rules in which what non-terminal " &
-          "represents the empty sequent."
+          "Unexpected Empty Rule: Ambiguous rules for parse empty sequent cannot be used in nimy. Check your grammer has no ambiguous rules in which what non-terminal represents the empty sequent."
         )

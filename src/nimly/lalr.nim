@@ -57,7 +57,6 @@ proc closure[T](g: Grammar[T], whole: LALRItems[T]): LALRItems[T] =
   var checkSet = whole
   while checkSet.len > 0:
     var new: LALRItems[T]
-    new.init()
     for i in checkSet:
       match i.next:
         NonTermS:

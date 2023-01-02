@@ -33,6 +33,7 @@ proc `$`*[T](s: SetOfLRItems[T]): string =
   result = result & "--------\n"
 
 proc next[T](i: LRItem[T]): Symbol[T] =
+  ## symbol to the right of the dot 
   if i.pos >= i.rule.len:
     return End[T]()
   result = i.rule.right[i.pos]
@@ -46,6 +47,7 @@ proc nextSkipEmpty[T](i: LRItem[T]): Symbol[T] =
       break
 
 proc pointForward[T](i: LRItem[T]): LRItem[T] =
+  ## move dot up by 1 
   doAssert i.pos < i.rule.len
   result = LRItem[T](rule: i.rule, pos: i.pos + 1)
 
@@ -54,10 +56,11 @@ proc closure[T](g: Grammar[T], whole: LRItems[T]): LRItems[T] =
   var checkSet = whole
   while checkSet.len > 0:
     var new: LRItems[T]
-    new.init()
     for i in checkSet:
       match i.next:
+        # S -> p.Nq where N is NonTerm 
         NonTermS:
+          # look for N -> ...
           for r in g.filterRulesLeftIs(i.next):
             let n = LRItem[T](rule: r, pos: 0)
             if not result.containsOrIncl(n):
@@ -83,6 +86,7 @@ proc hash*[T](x: LRItem[T]): Hash =
 
 proc makeCanonicalCollection*[T](g: Grammar[T]): (SetOfLRItems[T],
                                                   TransTable[T]) =
+  # seed C with the closure of start rule
   let init = g.closure([LRItem[T](rule: g.startRule, pos: 0)].toHashSet)
   var
     cc = [
@@ -93,17 +97,18 @@ proc makeCanonicalCollection*[T](g: Grammar[T]): (SetOfLRItems[T],
   tt.add(initTransTableRow[T]())
   while checkSet.len > 0:
     var new: SetOfLRItems[T]
-    new.init()
+    # for each set of items I in C 
     for itms in checkSet:
       let frm = cc.indexOf(itms)
       assert itms == g.closure(itms)
-      var done = initHashSet[Symbol[T]]()
-      done.incl(End[T]())
       for i in itms:
+        # for each (applicable) grammar symbol X 
         let s = i.next
-        if (not done.containsOrIncl(s)):
+        if s != End[T]():
           let gt = goto[T](g, itms, s)
+          # if GOTO(I,X) exist (it must since we use i.next) and is not in C 
           if (not cc.containsOrIncl(gt)):
+            # Add GOTO(I,X) to C 
             tt.add(initTransTableRow[T]())
             assert cc.card == tt.len
             new.incl(gt)
@@ -113,6 +118,7 @@ proc makeCanonicalCollection*[T](g: Grammar[T]): (SetOfLRItems[T],
   result = (cc, tt)
 
 proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
+  ## This produces the SLR table. 
   var
     actionTable: ActionTable[T]
     gotoTable: GotoTable[T]
@@ -130,7 +136,7 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
     for item in itms:
       let sym = item.nextSkipEmpty
       match sym:
-        TermS:
+        TermS: # shift terminals
           let i = canonicalCollection.indexOf(ag.goto(itms, sym))
           assert i > -1,"There is no 'items' which is equal to 'goto'"
           when defined(nimydebug):
@@ -138,14 +144,16 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
               actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
               echo "LR:CONFLICT!!!" & $idx & ":" & $sym
           actionTable[idx][sym] = Shift[T](i)
-        NonTermS:
+        NonTermS: # goto nonterminals 
           let i = canonicalCollection.indexOf(ag.goto(itms, sym))
           assert i > -1, "There is no 'items' which is equal to 'goto'"
           gotoTable[idx][sym] = i
-        End:
+        End: # accept or reduce 
           if item.rule.left == ag.start:
             actionTable[idx][End[T]()] = Accept[T]()
           else:
+            # this is the SLR reduction rule: give A -> a., only reduce 
+            # if input is in FOLLOW(A)
             for flw in ag.followTable[item.rule.left]:
               if flw.kind == SymbolKind.TermS or flw.kind == SymbolKind.End:
                 if actionTable[idx].haskey(flw) and
