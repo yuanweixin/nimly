@@ -29,6 +29,15 @@ type
     left*: Symbol[T]
     right*: seq[Symbol[T]]
 
+  Grammar*[T] = object
+    rules*: HashSet[Rule[T]]
+    start*: Symbol[T]
+    firstTable*: FirstTable[T]
+    followTable*: FollowTable[T]
+
+  FollowTable[T] = Table[Symbol[T], HashSet[Symbol[T]]]
+  FirstTable[T] = Table[Symbol[T], HashSet[Symbol[T]]]
+
 proc len*[T](r: Rule[T]): int =
   return r.right.len
 
@@ -43,6 +52,7 @@ proc `==`*[T](a, b: Symbol[T]): bool =
     _:
       return true
 
+# =============================== ctors =======================================
 proc NonTermS*[T](nonTerm: sym): Symbol[T] =
   return Symbol[T](kind: SymbolKind.NonTermS, nonTerm: nonTerm)
 
@@ -57,16 +67,6 @@ proc Empty*[T](): Symbol[T] =
 
 proc TermS*[T](term: T): Symbol[T] =
   return Symbol[T](kind: SymbolKind.TermS, term: term)
-
-type
-  Grammar*[T] = object
-    rules*: HashSet[Rule[T]]
-    start*: Symbol[T]
-    firstTable*: FirstTable[T]
-    followTable*: FollowTable[T]
-
-  FollowTable[T] = Table[Symbol[T], HashSet[Symbol[T]]]
-  FirstTable[T] = Table[Symbol[T], HashSet[Symbol[T]]]
 
 proc `$`*[T](ft: FollowTable[T]): string =
   result = "FollowTable:\n--------\n"
@@ -100,14 +100,14 @@ proc lenWithoutEmpty*[T](r: Rule[T]): int =
 
 proc `[]`[T](os: OrderedSet[T], idx: int): T {.inline.} =
   if os.len <= idx:
-    raise newException(IndexError, "idx is too large.")
+    raise newException(IndexDefect, "idx is too large.")
   for i, key in os:
     if i == idx:
       return key
 
 proc newRule*[T](left: Symbol[T], right: varargs[Symbol[T]]): Rule[T] =
   assert left.kind == SymbolKind.NonTermS,
-     "Right side of rule must be Non-Terminal Symbol."
+     "Left side of rule must be Non-Terminal Symbol."
   var rightSeq: seq[Symbol[T]] = @[]
   for s in right:
     rightSeq.add(s)
@@ -116,7 +116,7 @@ proc newRule*[T](left: Symbol[T], right: varargs[Symbol[T]]): Rule[T] =
 
 proc newRule*[T](left: Symbol[T], right: Symbol[T]): Rule[T] =
   assert left.kind == SymbolKind.NonTermS,
-     "Right side of rule must be Non-Terminal Symbol."
+     "Left side of rule must be Non-Terminal Symbol."
   result = Rule[T](left: left, right: @[right])
 
 proc initGrammar*[T](rules: HashSet[Rule[T]], start: Symbol[T]): Grammar[T] =
@@ -133,21 +133,21 @@ proc filterRulesLeftIs*[T](g: Grammar[T], x: Symbol[T]): seq[Rule[T]] =
       assert (not (r in result)), "x in result."
       result.add(r)
 
-proc isAugument*[T](g: Grammar[T]): bool =
+proc isAugment*[T](g: Grammar[T]): bool =
   result = (g.start == NonTermS[T]("__Start__"))
   assert (g.filterRulesLeftIs(g.start).len != 0),
-     "`g` is invalid gramer."
+     "`g` is invalid grammar."
 
 proc startRule*[T](g: Grammar[T]): Rule[T] =
-  doAssert g.isAugument, "`g` is not augument gramer."
+  doAssert g.isAugment, "`g` is not augmented grammar."
   let ret = g.filterRulesLeftIs(g.start)
-  doAssert (ret.len == 1), "`g` is invalid augument gramer."
+  doAssert (ret.len == 1), "`g` is invalid augment grammar."
   for r in ret:
     result = r
 
 proc symbolSet*[T](g: Grammar[T]): HashSet[Symbol[T]] =
   result.init()
-  for r in g.rules:
+  for r in g.rules: # TODO assumes rhs are reachable from start. Add validation
     for s in r.right:
       result.incl(s)
   result.incl(g.start)
@@ -155,7 +155,7 @@ proc symbolSet*[T](g: Grammar[T]): HashSet[Symbol[T]] =
 proc nonTermSymbolSet*[T](g: Grammar[T]): HashSet[Symbol[T]] =
   result.init()
   for r in g.rules:
-    for s in r.right:
+    for s in r.right: # TODO assumes rhs reachable from start. Add validation. 
       if s.kind == SymbolKind.NonTermS:
         result.incl(s)
   result.incl(g.start)
@@ -253,23 +253,21 @@ proc makeFollowTable[T](g: Grammar[T]): FollowTable[T] =
           _:
             doAssert false, "There is other than Term or NonTerm in Rules."
 
-proc augument*[T](g: Grammar[T]): Grammar[T] =
+proc augment*[T](g: Grammar[T]): Grammar[T] =
   let
     start = NonTermS[T]("__Start__")
     startRule = newRule(left = start, right = g.start)
   if g.rules.contains(startRule):
     result = initGrammar(g.rules, start)
-    result.firstTable = result.makeFirstTable
-    result.followTable = result.makeFollowTable
-    return
-  let newRules = g.rules + [startRule].toHashSet()
-  result = initGrammar(newRules, start)
+  else:
+    let newRules = g.rules + [startRule].toHashSet()
+    result = initGrammar(newRules, start)
   result.firstTable = result.makeFirstTable
   result.followTable = result.makeFollowTable
 
 proc calFirsts*[T](g: Grammar[T],
                    symbols: seq[Symbol[T]]): HashSet[Symbol[T]] =
-  assert g.isAugument
+  assert g.isAugment
   result.init
   for s in symbols:
     match s:

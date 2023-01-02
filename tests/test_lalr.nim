@@ -12,7 +12,7 @@ let
       newRule(NonTermS[string]("C"), TermS("d")),
     ].toHashSet,
     NonTermS[string]("S")
-  ).augument
+  ).augment
 
   g415 = initGrammar[string](
     [
@@ -24,7 +24,7 @@ let
       newRule(NonTermS[string]("R"), NonTermS[string]("L")),
     ].toHashSet,
     NonTermS[string]("S")
-  ).augument
+  ).augment
 
 test "test closure for lalr":
   let

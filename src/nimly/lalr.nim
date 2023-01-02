@@ -165,10 +165,10 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
   when defined(nimydebug):
     echo "[nimly] start: make table for parser"
   let
-    ag = if g.isAugument:
+    ag = if g.isAugment:
            g
          else:
-           g.augument
+           g.augment
     (cc, tt) = makeCanonicalCollection[T](ag)
     knl = cc.filterKernel
     lalrKnl = knl.toLALRKernel(ag, tt)

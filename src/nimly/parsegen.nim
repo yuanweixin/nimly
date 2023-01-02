@@ -544,7 +544,7 @@ macro nimy*(head, body: untyped): untyped =
   let topProcId = genSym(nskProc)
   result = newTree(nnkStmtList)
 
-  # read BNF first (collert info)
+  # read BNF first (collect info)
   for clause in body:
     if clause.kind == nnkCommentStmt:
       continue

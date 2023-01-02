@@ -119,10 +119,10 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
   actionTable = initTable[State, ActionRow[T]]()
   gotoTable = initTable[State, GotoRow[T]]()
   let
-    ag = if g.isAugument:
+    ag = if g.isAugment:
            g
          else:
-           g.augument
+           g.augment
     (canonicalCollection, _) = makeCanonicalCollection[T](ag)
   for idx, itms in canonicalCollection:
     actionTable[idx] = initTable[Symbol[T], ActionTableItem[T]]()
