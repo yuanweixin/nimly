@@ -450,7 +450,7 @@ macro nimy*(head, body: untyped): untyped =
     tokenKind = parseStmt(tokenType.strVal & "Kind")[0]
   for i, hd in head:
     if i > 1:
-      if hd.kind == nnkIdent and $hd == "LR0":
+      if hd.kind == nnkIdent and $hd == "SLR":
         tableMaker = newIdentNode("makeTableLR")
   var
     nimyInfo = initNimyInfo()

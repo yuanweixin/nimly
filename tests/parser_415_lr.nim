@@ -2,7 +2,7 @@ import patty
 import nimly
 import parser_415
 
-nimy psr415LR[MyTerm, LR0]:
+nimy psr415LR[MyTerm, SLR]:
   start[string]:
     left EQ right:
       return $1 & "=" & $3

@@ -42,7 +42,7 @@ niml testStateLex[StateToken]:
   r"\s":
     return SIGNORE()
 
-nimy testStatePar[StateToken,LR0]:
+nimy testStatePar[StateToken,SLR]:
   top[string]:
     state:
       return $1
