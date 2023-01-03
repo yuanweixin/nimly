@@ -19,14 +19,14 @@ type
     repRule: NimNode
   NimyInfo = Table[string, NimyRow]
 
-iterator iter(a, b: NimNode, c: seq[NimNode]): (int, NimNode) =
+iterator iter(topClause, body: NimNode, optAndRep: seq[NimNode]): (int, NimNode) =
   var cnt = 0
-  yield (cnt, a)
+  yield (cnt, topClause)
   inc(cnt)
-  for val in b:
+  for val in body:
     yield (cnt, val)
     inc(cnt)
-  for val in c:
+  for val in optAndRep:
     yield (cnt, val)
     inc(cnt)
 
@@ -55,17 +55,8 @@ proc initRuleToProc*[T, S, R](): RuleToProc[T, S, R] =
   return initTable[Rule[S], PTProc[T, S, R]]()
 
 proc initRuleToProcNode(tokenType, tokenKind, returnType: NimNode): NimNode =
-  result = nnkAsgn.newTree(
-    newIdentNode("result"),
-    nnkCall.newTree(
-      nnkBracketExpr.newTree(
-        newIdentNode("initRuleToProc"),
-        tokenType,
-        tokenKind,
-        returnType
-      )
-    )
-  )
+  result = quote do:
+    result = initRuleToProc[`tokenType`, `tokenKind`, `returnType`]()
 
 proc genKindNode(kindTy, kind: NimNode): NimNode =
   result = nnkDotExpr.newTree(
@@ -76,21 +67,13 @@ proc genKindNode(kindTy, kind: NimNode): NimNode =
 proc convertToSymNode(name: string, kindTy: NimNode,
                       nimyInfo: NimyInfo): NimNode =
   if name.isNonTerm(nimyInfo):
-    result = nnkCall.newTree(
-      nnkBracketExpr.newTree(
-        newIdentNode("NonTermS"),
-        kindTy
-      ),
-      newStrLitNode(name)
-    )
+    let nameStrlit = newStrLitNode(name)
+    result = quote do:
+      NonTermS[`kindTy`](`nameStrLit`)
   elif name.isTerm(nimyInfo):
-    result = nnkCall.newTree(
-      nnkBracketExpr.newTree(
-        newIdentNode("TermS"),
-        kindTy
-      ),
-      genKindNode(kindTy, newIdentNode(name))
-    )
+    let nameId = ident(name)
+    result = quote do:
+      TermS[`kindTy`](`kindTy`.`nameId`)
   else:
     doAssert false
 
@@ -173,6 +156,7 @@ proc isTerm(node: NimNode, nimyInfo: NimyInfo): bool =
   return false
 
 iterator ruleRight(node: NimNode): NimNode =
+  # this ends up yielding each NimNode on the rhs of production
   case node.kind
   of nnkCall:
     yield node[0]
@@ -233,42 +217,13 @@ proc replaceBody(body, param: NimNode,
       let index = int((body[1].intVal) - 1)
       # term
       if types[index] == "":
-        return nnkDotExpr.newTree(
-          nnkBracketExpr.newTree(
-            nnkDotExpr.newTree(
-              param,
-              newIdentNode("tree")
-            ),
-            newIntLitNode(index)
-          ),
-          newIdentNode("token")
-        )
+        result = quote do:
+          `param`.tree[`index`].token
       # nonterm
       else:
-        # table[param[index].rule](param[index].tree)
-        return nnkCall.newTree(
-          nnkBracketExpr.newTree(
-            nimyInfo[types[index]].ruleToProc,
-            nnkDotExpr.newTree(
-              nnkBracketExpr.newTree(
-                nnkDotExpr.newTree(
-                  param,
-                  newIdentNode("tree")
-                ),
-                newIntLitNode(index)
-              ),
-              newIdentNode("rule")
-            )
-          ),
-          nnkBracketExpr.newTree(
-            nnkDotExpr.newTree(
-              param,
-              newIdentNode("tree")
-            ),
-            newIntLitNode(index)
-          ),
-        )
-
+        let ruleToProc = nimyInfo[types[index]].ruleToProc
+        result = quote do:
+          `ruleToProc`[`param`.tree[`index`].rule](`param`.tree[`index`])
     else:
       if body.len > 0:
         result = newTree(body.kind)
@@ -297,91 +252,37 @@ proc tableMakerProc(name, tokenType, tokenKind, topNonTerm,
                     tableMaker: NimNode,
                     rules, ruleDefs, syms: seq[NimNode]): NimNode =
   var body = nnkStmtList.newTree()
-  body.add(
-    nnkWhenStmt.newTree(
-      nnkElifBranch.newTree(
-        nnkCall.newTree(
-          newIdentNode("defined"),
-          newIdentNode("nimlydebug")
-        ),
-        nnkStmtList.newTree(
-          nnkCommand.newTree(
-            newIdentNode("echo"),
-            newLit("START: makeing the Parser")
-          )
-        )
-      )
-    )
-  )
+  body.add quote do:
+    when defined(nimydebug):
+      echo "START: making the Parser"
   for rd in ruleDefs:
     body.add(rd)
   let
     setId = genSym(nskVar)
     grmId = genSym()
-  body.add(
-    nnkVarSection.newTree(
-      nnkIdentDefs.newTree(
-        setId,
-        nnkBracketExpr.newTree(
-          newIdentNode("seq"),
-          nnkBracketExpr.newTree(
-            newIdentNode("Rule"),
-            tokenKind
-          )
-        ),
-        nnkPrefix.newTree(
-          newIdentNode("@"),
-          nnkBracket.newTree(
-          )
-        )
-      )
-    )
-  )
+  body.add quote do:
+    var `setId`: seq[Rule[`tokenKind`]] = @[]
+  
   for rule in rules:
-    body.add(
-      nnkCall.newTree(
-        nnkDotExpr.newTree(
-          setId,
-          newIdentNode("add")
-        ),
-        rule
-      )
-    )
-  body.add(
-    newLetStmt(
-      grmId,
-      nnkCall.newTree(
-        newIdentNode("initGrammar"),
-        setId,
-        topNonTerm
-      )
-    )
-  )
-  body.add(
-    nnkAsgn.newTree(
-      newIdentNode("result"),
-      nnkCall.newTree(
-        nnkBracketExpr.newTree(
-          tableMaker,
-          tokenKind
-        ),
-        grmId
-      )
-    )
-  )
-
-  result = newProc(
-    name,
-    @[
-      nnkBracketExpr.newTree(
-        newIdentNode("ParsingTable"),
-        tokenKind
-      )
-    ],
-    body
-  )
+    body.add quote do:
+      `setId`.add(`rule`)
+  body.add quote do:
+    let `grmId` = initGrammar(`setId`, `topNonTerm`)
+    result = `tableMaker`[`tokenKind`](`grmId`)
+  result = quote do:
+    proc `name`(): ParsingTable[`tokenKind`] =
+      `body`
 
 proc getOpt(sym, ty, nt: NimNode): NimNode =
+  # for input:
+  # sym=DOT, ty=MyToken, nt=__opt_DOT
+  # 
+  # generates: 
+  # __opt_DOT[seq[MyToken]] do:
+  #     DOT:
+  #       return @[$1]
+  #     []:
+  #       return @[]
   result = nnkCall.newTree(
     nnkBracketExpr.newTree(
       nt,
@@ -424,6 +325,15 @@ proc getOpt(sym, ty, nt: NimNode): NimNode =
   )
 
 proc getRepOpt(sym, ty, nt: NimNode): NimNode =
+  # for input:
+  # sym=NUM, ty=MyToken, nt=__rep_NUM, nnt=__inner_rep_NUM
+  # 
+  # produces:
+  # __rep_NUM[seq[MyToken]] do:
+  #   __inner___rep_NUM:
+  #     return $1
+  #   []:
+  #     return @[]
   result = nnkCall.newTree(
     nnkBracketExpr.newTree(
       nt,
@@ -461,6 +371,14 @@ proc getRepOpt(sym, ty, nt: NimNode): NimNode =
   )
 
 proc getRep(sym, ty, nt, nnt: NimNode): seq[NimNode] =
+  # e.g. sym=NUM, ty=MyToken, nt=__rep_NUM, nnt=__inner_rep_NUM
+  # below produces: 
+  # __inner___rep_NUM[seq[MyToken]] do:
+  #   __inner___rep_NUM NUM:
+  #       result = $1
+  #       result.add($2)
+  #   NUM:
+  #     return @[$1]
   result = @[]
   result.add(getRepOpt(nnt, ty, nt))
   let new = nnkCall.newTree(
@@ -579,7 +497,7 @@ macro nimy*(head, body: untyped): untyped =
         if sym.isTerm(nimyInfo) and not(nimyInfo.haskey(sym.strVal)):
           nimyInfo[sym.strVal] = initNimyRow(Term)
         if not (sym.kind in {nnkBracketExpr, nnkCurlyExpr}):
-          continue
+          continue # not opt or rep 
         doAssert sym.len == 1
         let innerSym = sym[0].strVal
         if sym[0].isTerm(nimyInfo) and
@@ -617,6 +535,12 @@ macro nimy*(head, body: untyped): untyped =
         of nnkCurlyExpr:
           if nimyInfo[innerSym].optRule.kind != nnkEmpty:
             continue
+          # this bloody mess here is to rewrite the production
+          # NUM{} into 
+          # __rep_NUM -> Empty | __rep_NUM -> __inner_rep_NUM
+          # and
+          # __inner_rep_NUM -> Term(Num) | 
+          # __inner_rep_NUM -> __inner_rep_NUM Term(Num)
           let
             newStr = "__rep_" & innerSym
             new = newIdentNode(newStr)
@@ -818,66 +742,10 @@ macro nimy*(head, body: untyped): untyped =
   result.add(ruleDefs)
 
   # add proc parse
-  result.add(
-    nnkProcDef.newTree(
-      nnkPostfix.newTree(
-        newIdentNode("*"),
-        newIdentNode("parse")
-      ),
-      newEmptyNode(),
-      nnkGenericParams.newTree(
-        nnkIdentDefs.newTree(
-          newIdentNode("T"),
-          newIdentNode("S"),
-          newEmptyNode(),
-          newEmptyNode()
-        )
-      ),
-      nnkFormalParams.newTree(
-        returnType,
-        nnkIdentDefs.newTree(
-          newIdentNode("parser"),
-          nnkVarTy.newTree(
-            nnkBracketExpr.newTree(
-              newIdentNode("Parser"),
-              newIdentNode("S")
-            )
-          ),
-          newEmptyNode()
-        ),
-        nnkIdentDefs.newTree(
-          newIdentNode("lexer"),
-          nnkVarTy.newTree(
-            nnkBracketExpr.newTree(
-              newIdentNode("NimlLexer"),
-              newIdentNode("T")
-            )
-          ),
-          newEmptyNode()
-        )
-      ),
-      newEmptyNode(),
-      newEmptyNode(),
-      nnkStmtList.newTree(
-        nnkLetSection.newTree(
-          nnkIdentDefs.newTree(
-            newIdentNode("tree"),
-            newEmptyNode(),
-            nnkCall.newTree(
-              newIdentNode("parseImpl"),
-              newIdentNode("parser"),
-              newIdentNode("lexer")
-            )
-          )
-        ),
-        nnkReturnStmt.newTree(
-          nnkCall.newTree(
-            topProcId,
-            newIdentNode("tree"),
-          )
-        )
-      )
-    )
-  )
+  result.add quote do:
+    proc parse*[T,S](parser: var Parser[S]; lexer: var NimlLexer[T]): `returnType` = 
+      let tree = parseImpl(parser, lexer)
+      return `topProcId`(tree)
+  
   when defined(nimydebug):
     echo toStrLit(result)
