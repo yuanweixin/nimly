@@ -283,6 +283,8 @@ proc getOpt(sym, ty, nt: NimNode): NimNode =
   #       return @[$1]
   #     []:
   #       return @[]
+  # can't quote do this because it generates some open symbols 
+  # which breaks the hacky pattern matching this dsl uses elsewhere
   result = nnkCall.newTree(
     nnkBracketExpr.newTree(
       nt,
@@ -334,6 +336,8 @@ proc getRepOpt(sym, ty, nt: NimNode): NimNode =
   #     return $1
   #   []:
   #     return @[]
+  # can't quote do this because it generates some open symbols 
+  # which breaks the hacky pattern matching this dsl uses elsewhere
   result = nnkCall.newTree(
     nnkBracketExpr.newTree(
       nt,
@@ -379,6 +383,8 @@ proc getRep(sym, ty, nt, nnt: NimNode): seq[NimNode] =
   #       result.add($2)
   #   NUM:
   #     return @[$1]
+  # can't quote do this because it generates some open symbols 
+  # which breaks the hacky pattern matching this dsl uses elsewhere
   result = @[]
   result.add(getRepOpt(nnt, ty, nt))
   let new = nnkCall.newTree(
