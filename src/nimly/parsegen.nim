@@ -452,7 +452,69 @@ func parseHead(head: NimNode) : (NimNode, NimNode, ParserType) =
   else:
     failwith "I expected nimy <parserName>[<tokType>,[<parserType>]]"
 
+func validRhsSymType(n: NimNode) : bool = 
+  return n.matches(Ident() | BracketExpr([Ident()]) | CurlyExpr([Ident()]))
+
+func validRuleLevelPrec(n: NimNode) : bool = 
+  return n.matches(Prefix([Ident(strVal: "%"), 
+              Command([Ident(strVal: "prec"), Ident()])]))
+
+func validAssociativity(n: NimNode) : bool = 
+  return n.matches(Ident(strVal: in ["left", "right", "nonassoc"]))
+
+proc validateRuleBody(n: NimNode) = 
+  case n
+  of CommentStmt():
+    discard 
+  of Call([Bracket(), StmtList()]) | Call([_.validRhsSymType(), StmtList()]): 
+    discard 
+  of Command([_.validRhsSymType(), _.validRhsSymType(), StmtList()]):
+    discard
+  of Command([_.validRhsSymType(), _.validRuleLevelPrec(), StmtList()]):
+    discard
+  of Command([_.validRhsSymType(), @c is Command(), StmtList()]):
+    while c.kind == nnkCommand:
+      if not c[0].validRhsSymType():
+        failwith "invalid rule body "  & repr n 
+      c = c[1]
+    if not c.validRhsSymType() and not c.validRuleLevelPrec():
+      failwith "invalid rule body " & repr n
+  else:
+    failwith "invalid rule body " & repr n 
+
+func validNestedTypeBracketExpr(n: NimNode) : bool = 
+  var nd = n 
+  while nd.kind == nnkBracketExpr:
+    if nd[0].kind != nnkIdent:
+      return false 
+    nd = nd[1]
+  return nd.kind == nnkIdent
+
+proc validateRule(n : NimNode) = 
+  case n 
+  of Prefix([Ident(strVal: "%"), Command([_.validAssociativity(), Ident()])]):
+    discard
+  of Prefix([Ident(strVal: "%"), Command([_.validAssociativity(), @rest is Command()])]):
+    while rest.kind == nnkCommand:
+      if rest[0].kind != nnkIdent:
+        failwith "invalid associativity declaration " & repr n 
+      rest = rest[1]
+    if rest.kind != nnkIdent:
+      failwith "invalid associativity declaration " & repr n 
+  of Call([BracketExpr([Ident(), @idOrNestedType is Ident()|BracketExpr()]), @rest is StmtList()]): # top[string] vs top[seq[string]]
+    if idOrNestedType.kind == nnkBracketExpr and not idOrNestedType.validNestedTypeBracketExpr():
+      failwith "Invalid return type declaration in: " & repr n
+    for ruleBody in rest:
+      ruleBody.validateRuleBody()
+  of CommentStmt():
+    discard
+  of Prefix():
+    failwith "invalid associativity declaration " & repr n 
+  else:
+    failwith "invalid rule : " & treeRepr n
+
 macro nimy*(head, body: untyped): untyped =
+  body.expectKind(nnkStmtList)
   let 
     (parserName, tokenType, parserType) = parseHead(head)
     tokenKind = ident(tokenType.strVal & "Kind")
@@ -461,8 +523,7 @@ macro nimy*(head, body: untyped): untyped =
           ident("makeTableLR")
         of Lalr:
           ident("makeTableLALR")
-  body.expectKind(nnkStmtList)
-    
+  
   var
     nimyInfo = initNimyInfo()
     first = true
@@ -481,10 +542,11 @@ macro nimy*(head, body: untyped): untyped =
 
   # read BNF first (collect info)
   for clause in body:
+    clause.validateRule()
     if clause.kind == nnkCommentStmt:
       continue
     let (nonTerm, rType) = parseLeft(clause)
-    doAssert (not (nimyInfo.haskey(nonTerm))), "some nonterm are duplicated"
+    doAssert (not (nimyInfo.haskey(nonTerm))), nonTerm & " appears more than once in the spec as the lhs of a rule"
     nimyInfo[nonTerm] = initNimyRow(NonTerm, rtn = rType,
                                     rtp = genSym(nskConst))
     if first:
