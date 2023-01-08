@@ -142,7 +142,7 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
           when defined(nimydebug):
             if actionTable[idx].haskey(sym) and
               actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
-              echo "LR:CONFLICT!!!" & $idx & ":" & $sym
+              echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
           actionTable[idx][sym] = Shift[T](i)
         NonTermS: # goto nonterminals 
           let i = canonicalCollection.indexOf(ag.goto(itms, sym))
@@ -159,16 +159,21 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
                 if actionTable[idx].haskey(flw) and
                    actionTable[idx][flw].kind == ActionTableItemKind.Shift:
                   when defined(nimydebug):
-                    echo "LR:CONFLICT!!!" & $idx & ":" & $flw
+                    echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $flw
+                  continue
+                if actionTable[idx].haskey(flw) and
+                   actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
+                  when defined(nimydebug):
+                    echo "SLR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $flw
                   continue
                 actionTable[idx][flw] = Reduce[T](item.rule)
         _:
           when defined(nimy_debug):
-            echo "LR: OTHER (" & $sym & ")"
+            echo "SLR: OTHER (" & $sym & ")"
           discard
   result = ParsingTable[T](action: actionTable, goto: gotoTable)
   when defined(nimydebug):
-    echo "LR:"
+    echo "SLR:"
     echo ag.followTable
     echo canonicalCollection
     echo result

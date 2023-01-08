@@ -204,7 +204,14 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
             if actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Shift:
               when defined(nimydebug):
-                echo "LALR:CONFLICT!!!" & $idx & ":" & $itm.ahead
+                echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
+              continue
+            # This could be the "mysterious LALR reduce reduce" conflict 
+            # TODO look up ways to solve this 
+            if actionTable[idx].haskey(itm.ahead) and
+               actionTable[idx][itm.ahead].kind == ActionTableItemKind.Reduce: 
+              when defined(nimydebug):
+                echo "LALR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
               continue
             actionTable[idx][itm.ahead] = Reduce[T](itm.rule)
         _:
