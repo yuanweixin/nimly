@@ -167,7 +167,8 @@ iterator ruleRight(node: NimNode): NimNode =
     while nd.kind == nnkCommand:
       yield nd[0]
       nd = nd[1]
-    yield nd
+    if nd.kind != nnkPrefix: # e.g. %prec Token
+      yield nd
   else:
     failwith "I do not understand this rule rhs: " & repr node
 
@@ -480,7 +481,7 @@ proc validateRuleBody(n: NimNode) =
     if not c.validRhsSymType() and not c.validRuleLevelPrec():
       failwith "invalid rule body " & repr n
   else:
-    failwith "invalid rule body " & repr n 
+    failwith "invalid rule body " & treeRepr n 
 
 func validNestedTypeBracketExpr(n: NimNode) : bool = 
   var nd = n 
@@ -513,8 +514,12 @@ proc validateRule(n : NimNode) =
   else:
     failwith "invalid rule : " & treeRepr n
 
+proc validateBody(n : NimNode) = 
+  doAssert n.kind == nnkStmtList 
+  for group in n:
+    group.validateRule()
+
 macro nimy*(head, body: untyped): untyped =
-  body.expectKind(nnkStmtList)
   let 
     (parserName, tokenType, parserType) = parseHead(head)
     tokenKind = ident(tokenType.strVal & "Kind")
@@ -523,6 +528,7 @@ macro nimy*(head, body: untyped): untyped =
           ident("makeTableLR")
         of Lalr:
           ident("makeTableLALR")
+  body.validateBody()
   
   var
     nimyInfo = initNimyInfo()
@@ -540,10 +546,10 @@ macro nimy*(head, body: untyped): untyped =
   let topProcId = genSym(nskProc)
   result = newTree(nnkStmtList)
 
+
   # read BNF first (collect info)
   for clause in body:
-    clause.validateRule()
-    if clause.kind == nnkCommentStmt:
+    if clause.kind notin {nnkCall, nnkCommand}:
       continue
     let (nonTerm, rType) = parseLeft(clause)
     doAssert (not (nimyInfo.haskey(nonTerm))), nonTerm & " appears more than once in the spec as the lhs of a rule"
@@ -567,7 +573,7 @@ macro nimy*(head, body: untyped): untyped =
   # make opt and rep
   var optAndRep: seq[NimNode] = @[]
   for clause in body:
-    if clause.kind == nnkCommentStmt:
+    if clause.kind notin {nnkCall, nnkCommand}:
       continue
     for ruleClause in clause[1]:
       if ruleClause.kind == nnkCommentStmt:
