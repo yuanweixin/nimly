@@ -100,6 +100,7 @@ proc hash*[T](x: Rule[T]): Hash =
   var h: Hash = 0
   h = h !& hash(x.left)
   h = h !& hash(x.right)
+  h = h !& hash(x.prec)
   return !$h
 
 proc lenWithoutEmpty*[T](r: Rule[T]): int =
