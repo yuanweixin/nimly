@@ -7,6 +7,7 @@ import patty
 import parsetypes
 import parser
 import slr
+import std/options
 
 type
   LALRItem[T] = object
@@ -25,6 +26,41 @@ proc initHashSetOfLALRItems[T](): SetOfLALRItems[T] =
 
 proc initPropagateTable[T](): PropagateTable[T] =
   result = initTable[LRItem[T], HashSet[(int, LRItem[T])]]()
+
+proc `$`*[T](x: LALRItems[T]) : string = 
+  for i in x:
+    result.add i.rule.left.nonTerm
+    result.add " -> "
+    for r in i.rule.right:
+      case r.kind
+      of SymbolKind.TermS:
+        result.add $r.term
+        result.add " "
+      of SymbolKind.NonTermS:
+        result.add $r.nonTerm
+        result.add " "
+      of SymbolKind.Dummy:
+        result.add "# "
+      of SymbolKind.End:
+        result.add "$"
+      of SymbolKind.Empty:
+        result.add "epsilon "
+    if i.rule.prec.isSome:
+      result.add " prec "
+      result.add $i.rule.prec.get
+    result.add " ahead: "
+
+    case i.ahead.kind
+    of SymbolKind.End:
+      result.add "$ "
+    of SymbolKind.TermS:
+      result.add $i.ahead.term
+      result.add " "
+    else:
+      discard
+    result.add " pos " 
+    result.add $i.pos
+    result.add "\n"
 
 proc hash*[T](x: LALRItem[T]): Hash =
   var h: Hash = 0
@@ -192,9 +228,13 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
         TermS:
           if actionTable[idx].haskey(sym) and
               actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
-            echo "LALR:CONFLICT!!!" & $idx & ":" & $sym
             actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, tt[idx][sym])
-            echo "Resolved in favor of " & $actionTable[idx][sym]
+            when defined(nimyDebug):
+              echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym 
+              echo "Resolved in favor of " & $actionTable[idx][sym]
+          elif actionTable[idx].haskey(sym) and
+              actionTable[idx][sym].kind == ActionTableItemKind.Error:
+            continue 
           else:
             actionTable[idx][sym] = Shift[T](tt[idx][sym])
         NonTermS:
@@ -205,13 +245,17 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
           else:
             if actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Shift:
-              echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
               actionTable[idx][itm.ahead] = resolveShiftReduceConflict(itm.rule, 
               itm.ahead.term, g, actionTable[idx][itm.ahead].state)
-              echo "Conflict resolved in favor of " & $actionTable[idx][itm.ahead]
+              when defined(nimydebug):
+                echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
+                echo "Conflict resolved in favor of " & $actionTable[idx][itm.ahead]
             elif actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Reduce: 
               echo "LALR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead & ".  This usually indicates a serious error in the grammar. It could also be due to the LALR table compression, where multiple reducible rules are placed into the same parser state and there is insufficient context to distinguish them. A possible solution is to add a bogus token to one of the rules to force it into a distinct parser state. Another possible solution is to rewrite the grammar rules to reduce ambiguity." 
+              continue
+            elif actionTable[idx].haskey(itm.ahead) and
+               actionTable[idx][itm.ahead].kind == ActionTableItemKind.Error:
               continue
             else:
               actionTable[idx][itm.ahead] = Reduce[T](itm.rule)

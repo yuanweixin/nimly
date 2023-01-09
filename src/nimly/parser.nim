@@ -128,7 +128,7 @@ proc parseImpl*[T, S](parser: var Parser[S],
     except:
       raise
     when defined(nimydebug):
-      echo action
+      echo "action: " & $action
     case action.kind
     of ActionTableItemKind.Shift:
       let s = action.state

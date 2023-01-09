@@ -40,29 +40,24 @@ niml testLex[MyToken]:
 
 nimy testPar[MyToken]:
   %left PLUS MINUS
-  %left MULTI 
+  %left MULTI DIV
+  %nonassoc EXPON
   %nonassoc UMINUS
 
   exp[int]:
     NUM:
       return ($1).val
     exp PLUS exp:
-      echo $($1) & " + " & $($3)
       return $1 + $3
     exp MINUS exp:
-      echo $($1) & " - " & $($3)
       return $1 - $3
     exp MULTI exp:
-      echo $($1) & " * " & $($3)
       return $1 * $3
     exp DIV exp:
-      echo $($1) & " / " & $($3)
       return $1 div $3
     exp EXPON exp:
-      echo $($1) & " ^ " & $($3)
       return int(math.pow(float64($1), float64($3)))
     MINUS exp %prec UMINUS:
-      echo "-" & $($2)
       return -($2)
 
 proc calculate(str: string) : int = 
@@ -73,15 +68,14 @@ proc calculate(str: string) : int =
      parser = testPar.newParser()
   return parser.parse(lexer)
 
-test "top level prec rules":
-    # check calculate("20 + 1 * 2") == 22
-    # check calculate("20+1*2+30") == 52
-    # check calculate("1+2+3+4") == 10 
-    # check calculate("1*2*3*4") == 24
-    check calculate("1*2+3*4") == 14
-
 test "nonassoc":
-    discard
+  expect(Exception):
+    echo $calculate("2^2^3")
 
-test "rule level prec":
-    discard
+test "top level prec rules":
+    check calculate("20 + 1 * 2") == 22
+    check calculate("20+1*2+30") == 52
+    check calculate("1+2+3+4") == 10 
+    check calculate("1*2*3*4") == 24
+    check calculate("1*2+3*4") == 14
+    check calculate("-100 * -100") == 10000
