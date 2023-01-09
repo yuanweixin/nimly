@@ -6,7 +6,7 @@ import patty
 
 import parsetypes
 import parser
-import lr
+import slr
 
 type
   LALRItem[T] = object

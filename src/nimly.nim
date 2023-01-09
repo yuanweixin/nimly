@@ -3,7 +3,7 @@ import nimly/lexgen
 import nimly/lexer
 import nimly/parsetypes
 import nimly/parser
-import nimly/lr
+import nimly/slr
 import nimly/lalr
 import nimly/parsegen
 
@@ -39,11 +39,11 @@ export parser.newParser
 export parser.init
 export parser.`$`
 
-export lr.hash
-export lr.makeCanonicalCollection
-export lr.makeTableLR
-export lr.filterKernel
-export lr.`$`
+export slr.hash
+export slr.makeCanonicalCollection
+export slr.makeTableLR
+export slr.filterKernel
+export slr.`$`
 
 export lalr.hash
 export lalr.makeTableLALR

@@ -1,6 +1,6 @@
 import unittest
 import std/options
-include nimly/lr
+include nimly/slr
 include nimly/lalr
 
 let
