@@ -121,13 +121,14 @@ proc convertToSymNode(node, kindTy: NimNode,
   else:
     failwith node
 
-proc newRuleMakerNode(kindTy, left: NimNode,
+proc newRuleMakerNode(kindTy, prec: NimNode, left: NimNode,
                       right: varargs[NimNode]): NimNode =
   result = nnkCall.newTree(
     nnkBracketExpr.newTree(
       newIdentNode("newRule"),
       kindTy
     ),
+    prec,
     left
   )
   for node in right:
@@ -157,7 +158,7 @@ proc isTerm(node: NimNode, nimyInfo: NimyInfo): bool =
   else:
     failwith "unexpected rhs symbol " & repr node
   
-iterator ruleRight(node: NimNode): NimNode =
+iterator ruleRight(node: NimNode, excludePrec : bool = true): NimNode =
   # this ends up yielding each NimNode on the rhs of production
   case node
   of Call([@fst,.._]):
@@ -167,14 +168,17 @@ iterator ruleRight(node: NimNode): NimNode =
     while nd.kind == nnkCommand:
       yield nd[0]
       nd = nd[1]
-    if nd.kind != nnkPrefix: # e.g. %prec Token
-      yield nd
+    if excludePrec:
+      if nd.kind != nnkPrefix: # e.g. %prec Token
+        yield nd 
+    else:
+      yield nd 
   else:
     failwith "I do not understand this rule rhs: " & repr node
 
 proc parseRuleAndBody(node, kindTy, tokenType, left: NimNode,
-                      nimyInfo: var NimyInfo): (
-                        NimNode, seq[string], NimNode) =
+                      nimyInfo: var NimyInfo, precAssoc: var Table[string,(Precedence,Associativity)]): (
+                        NimNode, seq[string], NimNode, Option[Precedence]) =
   node.expectKind({nnkCall, nnkCommand})
   var
     right: seq[NimNode] = @[]
@@ -192,11 +196,28 @@ proc parseRuleAndBody(node, kindTy, tokenType, left: NimNode,
   else:
     failwith "Unable to extract body from " & repr node
 
-  for sym in node.ruleRight:
-    right.add(sym.convertToSymNode(kindTy, nimyInfo, noEmpty))
-    types.add(sym.nonTermOrEmpty(nimyInfo))
-  let ruleMaker = newRuleMakerNode(kindTy, left, right)
-  result = (ruleMaker, types, body)
+  var prec = none[Precedence]()
+  for sym in node.ruleRight(excludePrec=false):
+    if sym.kind == nnkPrefix:
+      if sym.matches(Prefix([_, Command([_, Ident(strVal: @tok)])])):
+        if tok notin precAssoc:
+          failwith "missing top level precedence declaration for token " & tok & " used in " & repr node
+        prec = some(precAssoc[tok][0])
+      else:
+        failwith "bug in dsl validation"
+    else:
+      right.add(sym.convertToSymNode(kindTy, nimyInfo, noEmpty))
+      types.add(sym.nonTermOrEmpty(nimyInfo))
+  let precNode = 
+    if prec.isNone:
+      quote do:
+        none[Precedence]()
+    else:
+      let pv = prec.get
+      quote do:
+        some[Precedence](`pv`)
+  let ruleMaker = newRuleMakerNode(kindTy, precNode, left, right)
+  result = (ruleMaker, types, body, prec)
 
 proc parseLeft(clause: NimNode): (string, NimNode) =
   case clause
@@ -248,22 +269,29 @@ proc makeRuleProc(name, body, rTy, tokenType, tokenKind: NimNode,
 
 proc tableMakerProc(name, tokenType, tokenKind, topNonTerm,
                     tableMaker: NimNode,
-                    rules, syms: seq[NimNode]): NimNode = 
+                    rules, syms: seq[NimNode], precedence: var Table[string,(Precedence, Associativity)]): NimNode = 
   var body = nnkStmtList.newTree()
   body.add quote do:
     when defined(nimydebug):
       echo "START: making the Parser"
   let
     setId = genSym(nskVar)
-    grmId = genSym()
+    grmId = genSym(nskVar)
   body.add quote do:
     var `setId`: seq[Rule[`tokenKind`]] = @[]
   
   for rule in rules:
     body.add quote do:
       `setId`.add(`rule`)
+  
   body.add quote do:
-    let `grmId` = initGrammar(`setId`, `topNonTerm`)
+    var `grmId` = initGrammar(`setId`, `topNonTerm`)
+  
+  if precedence.len > 0:
+    for tok, (prec, assoc) in precedence:
+      body.add quote do:
+        `grmId`.precAssoc[`tok`]= (`prec`, Associativity(`assoc`))
+  body.add quote do:
     result = `tableMaker`[`tokenKind`](`grmId`)
   result = quote do:
     proc `name`(): ParsingTable[`tokenKind`] =
@@ -457,6 +485,7 @@ func validRhsSymType(n: NimNode) : bool =
   return n.matches(Ident() | BracketExpr([Ident()]) | CurlyExpr([Ident()]))
 
 func validRuleLevelPrec(n: NimNode) : bool = 
+  # %prec <SomeString>
   return n.matches(Prefix([Ident(strVal: "%"), 
               Command([Ident(strVal: "prec"), Ident()])]))
 
@@ -519,6 +548,30 @@ proc validateBody(n : NimNode) =
   for group in n:
     group.validateRule()
 
+proc getAssociativity(n: NimNode): Associativity = 
+  case n 
+  of Prefix([_,Command([(strVal: @assoc), _])]):
+    if assoc == "left":
+      return Left
+    elif assoc == "right":
+      return Right
+    elif assoc == "nonassoc":
+      return NonAssoc
+    doAssert false, "bug in dsl validation"
+  else:
+    doAssert false, "bug in dsl validation"
+
+iterator precAssocToks(n: NimNode): string = 
+  case n 
+  of Prefix([_, Command([_, Ident(strVal: @tok)])]):
+    yield tok 
+  of Prefix([_, Command([_, @rest is Command()])]):
+    echo treeRepr rest
+    while rest.kind == nnkCommand:
+      yield rest[0].strVal
+      rest = rest[1]
+    yield rest.strVal
+
 macro nimy*(head, body: untyped): untyped =
   let 
     (parserName, tokenType, parserType) = parseHead(head)
@@ -543,9 +596,19 @@ macro nimy*(head, body: untyped): untyped =
     tableConstDefs: seq[NimNode] = @[]
     ruleProcPts: seq[NimNode] = @[]
     symNodes: seq[NimNode] = @[]
+    curPrecedence = 0 
+    precedence: Table[string,(Precedence, Associativity)]
   let topProcId = genSym(nskProc)
   result = newTree(nnkStmtList)
 
+  # generate the precedence table
+  for clause in body:
+    if clause.kind != nnkPrefix:
+      continue 
+    let assoc = clause.getAssociativity
+    for tok in clause.precAssocToks:
+      precedence[tok] = (curPrecedence, assoc)
+    inc curPrecedence
 
   # read BNF first (collect info)
   for clause in body:
@@ -680,7 +743,7 @@ macro nimy*(head, body: untyped): untyped =
 
   # read BNF second (make procs)
   for i, clause in iter(topClause, body, optAndRep):
-    if clause.kind == nnkCommentStmt:
+    if clause.kind notin {nnkCall, nnkCommand}:
       continue
     let
       (nonTerm, rType) = parseLeft(clause)
@@ -702,8 +765,9 @@ macro nimy*(head, body: untyped): untyped =
           newStrLitNode(nonTerm)
         )
         # argTypes: seq[string] (name if nonterm)
-        (ruleMaker, argTypes, clauseBody) = parseRuleAndBody(
-          ruleClause, tokenKind, tokenType, left, nimyInfo
+        (ruleMaker, argTypes, clauseBody, prec) = parseRuleAndBody(
+          ruleClause, tokenKind, tokenType, left, nimyInfo, 
+          precedence
         )
         ruleId = genSym(nskConst)
         ruleProcId = if i == 0:
@@ -794,7 +858,7 @@ macro nimy*(head, body: untyped): untyped =
     tmpName = genSym(nskProc)
   result.add(
     tableMakerProc(tmpName, tokenType, tokenKind, topNonTermNode, tableMaker,
-                   ruleIds, symNodes)
+                   ruleIds, symNodes, precedence)
   )
   when defined(nimylet):
     result.add(

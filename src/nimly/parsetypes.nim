@@ -3,6 +3,7 @@ import sets
 import hashes
 
 import patty
+import std/options
 
 type
   NimyError* = object of Exception
@@ -28,12 +29,21 @@ type
   Rule*[T] = object
     left*: Symbol[T]
     right*: seq[Symbol[T]]
+    prec*: Option[Precedence]
+
+  Associativity* = enum
+    Left
+    Right
+    NonAssoc
+
+  Precedence* = int 
 
   Grammar*[T] = object
     rules*: HashSet[Rule[T]]
     start*: Symbol[T]
     firstTable*: FirstTable[T]
     followTable*: FollowTable[T]
+    precAssoc*: Table[string,(Precedence, Associativity)]
 
   FollowTable[T] = Table[Symbol[T], HashSet[Symbol[T]]]
   FirstTable[T] = Table[Symbol[T], HashSet[Symbol[T]]]
@@ -105,19 +115,19 @@ proc `[]`[T](os: OrderedSet[T], idx: int): T {.inline.} =
     if i == idx:
       return key
 
-proc newRule*[T](left: Symbol[T], right: varargs[Symbol[T]]): Rule[T] =
+proc newRule*[T](prec: Option[Precedence], left: Symbol[T], right: varargs[Symbol[T]]): Rule[T] =
   assert left.kind == SymbolKind.NonTermS,
      "Left side of rule must be Non-Terminal Symbol."
   var rightSeq: seq[Symbol[T]] = @[]
   for s in right:
     rightSeq.add(s)
 
-  result = Rule[T](left: left, right: rightSeq)
+  result = Rule[T](left: left, right: rightSeq, prec: prec)
 
-proc newRule*[T](left: Symbol[T], right: Symbol[T]): Rule[T] =
+proc newRule*[T](prec: Option[Precedence], left: Symbol[T], right: Symbol[T]): Rule[T] =
   assert left.kind == SymbolKind.NonTermS,
      "Left side of rule must be Non-Terminal Symbol."
-  result = Rule[T](left: left, right: @[right])
+  result = Rule[T](left: left, right: @[right], prec: prec)
 
 proc initGrammar*[T](rules: HashSet[Rule[T]], start: Symbol[T]): Grammar[T] =
   result = Grammar[T](rules: rules, start: start)
@@ -260,7 +270,7 @@ proc makeFollowTable[T](g: Grammar[T]): FollowTable[T] =
 proc augment*[T](g: Grammar[T]): Grammar[T] =
   let
     start = NonTermS[T]("__Start__")
-    startRule = newRule(left = start, right = g.start)
+    startRule = newRule(prec=none[Precedence](), left = start, right = g.start)
   if g.rules.contains(startRule):
     result = initGrammar(g.rules, start)
   else:
@@ -295,3 +305,17 @@ proc calFirsts*[T](g: Grammar[T],
           NimyError,
           "Unexpected Empty Rule: Ambiguous rules for parse empty sequent cannot be used in nimy. Check your grammer has no ambiguous rules in which what non-terminal represents the empty sequent."
         )
+
+proc getPrecedence*[T](g: Grammar[T], tok: string): Option[Precedence] = 
+  if tok in g.precAssoc:
+    let prec,_ = g.precAssoc[tok]
+    return some(prec)
+  return none[Precedence]()
+
+proc getAssociativity*[T](g: Grammar[T], tok: string): Associativity = 
+  if tok in g.precAssoc:
+    let _,assoc = g.precAssoc[tok]
+    return assoc 
+  return NonAssoc 
+
+

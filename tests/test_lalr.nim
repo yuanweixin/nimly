@@ -1,27 +1,27 @@
 import unittest
-
+import std/options
 include nimly/lr
 include nimly/lalr
 
 let
   g = initGrammar[string](
     [
-      newRule(NonTermS[string]("S"),
+      newRule(none[Precedence](), NonTermS[string]("S"),
               NonTermS[string]("C"),NonTermS[string]("C")),
-      newRule(NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
-      newRule(NonTermS[string]("C"), TermS("d")),
+      newRule(none[Precedence](), NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
+      newRule(none[Precedence](), NonTermS[string]("C"), TermS("d")),
     ].toHashSet,
     NonTermS[string]("S")
   ).augment
 
   g415 = initGrammar[string](
     [
-      newRule(NonTermS[string]("S"), NonTermS[string]("R")),
-      newRule(NonTermS[string]("S"),
+      newRule(none[Precedence](), NonTermS[string]("S"), NonTermS[string]("R")),
+      newRule(none[Precedence](), NonTermS[string]("S"),
               NonTermS[string]("L"), TermS("="), NonTermS[string]("R")),
-      newRule(NonTermS[string]("L"), TermS("*"), NonTermS[string]("R")),
-      newRule(NonTermS[string]("L"), TermS("id")),
-      newRule(NonTermS[string]("R"), NonTermS[string]("L")),
+      newRule(none[Precedence](), NonTermS[string]("L"), TermS("*"), NonTermS[string]("R")),
+      newRule(none[Precedence](), NonTermS[string]("L"), TermS("id")),
+      newRule(none[Precedence](), NonTermS[string]("R"), NonTermS[string]("L")),
     ].toHashSet,
     NonTermS[string]("S")
   ).augment
@@ -33,28 +33,28 @@ test "test closure for lalr":
     expected =  [
       itm,
       LALRItem[string](
-        rule: newRule(NonTermS[string]("S"),
+        rule: newRule(none[Precedence](), NonTermS[string]("S"),
                       NonTermS[string]("C"),NonTermS[string]("C")),
         pos: 0,
         ahead: End[string]()
       ),
       LALRItem[string](
-        rule: newRule(NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
+        rule: newRule(none[Precedence](), NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
         pos: 0,
         ahead: TermS("c")
       ),
       LALRItem[string](
-        rule: newRule(NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
+        rule: newRule(none[Precedence](), NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
         pos: 0,
         ahead: TermS("d")
       ),
       LALRItem[string](
-        rule: newRule(NonTermS[string]("C"), TermS("d")),
+        rule: newRule(none[Precedence](), NonTermS[string]("C"), TermS("d")),
         pos: 0,
         ahead: TermS("c")
       ),
       LALRItem[string](
-        rule: newRule(NonTermS[string]("C"), TermS("d")),
+        rule: newRule(none[Precedence](), NonTermS[string]("C"), TermS("d")),
         pos: 0,
         ahead: TermS("d")
       )
@@ -76,7 +76,7 @@ test "test make LALR kernel":
   for i, itms in kernel:
     if itms.contains(
       LRItem[string](
-        rule: newRule(NonTermS[string]("S"),
+        rule: newRule(none[Precedence](), NonTermS[string]("S"),
                       NonTermS[string]("L"), TermS("="),
                       NonTermS[string]("R")),
         pos: 1
@@ -89,23 +89,23 @@ test "test make LALR kernel":
   for i, itms in lalrKernel:
     if itms.contains(
       LRItem[string](
-        rule: newRule(NonTermS[string]("R"), NonTermS[string]("L")),
+        rule: newRule(none[Precedence](), NonTermS[string]("R"), NonTermS[string]("L")),
         pos: 1
       )
     ) or itms.contains(
       LRItem[string](
-        rule: newRule(NonTermS[string]("L"),
+        rule: newRule(none[Precedence](), NonTermS[string]("L"),
                       TermS("*"), NonTermS[string]("R")),
         pos: 1
       )
     ) or itms.contains(
       LRItem[string](
-        rule: newRule(NonTermS[string]("L"), TermS("id")),
+        rule: newRule(none[Precedence](), NonTermS[string]("L"), TermS("id")),
         pos: 1
       )
     ) or itms.contains(
       LRItem[string](
-        rule: newRule(NonTermS[string]("L"),
+        rule: newRule(none[Precedence](), NonTermS[string]("L"),
                       TermS("*"), NonTermS[string]("R")),
         pos: 2
       )
