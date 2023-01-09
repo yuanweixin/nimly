@@ -190,11 +190,13 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
       let sym = itm.nextSkipEmpty
       match sym:
         TermS:
-          when defined(nimydebug):
-            if actionTable[idx].haskey(sym) and
-               actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
-              echo "LALR:CONFLICT!!!" & $idx & ":" & $sym
-          actionTable[idx][sym] = Shift[T](tt[idx][sym])
+          if actionTable[idx].haskey(sym) and
+              actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
+            echo "LALR:CONFLICT!!!" & $idx & ":" & $sym
+            actionTable[idx][sym] = resolveShiftReduceConflict(itm.rule, sym.term, g, tt[idx][sym])
+            echo "Resolved in favor of " & $actionTable[idx][sym]
+          else:
+            actionTable[idx][sym] = Shift[T](tt[idx][sym])
         NonTermS:
           gotoTable[idx][sym] = tt[idx][sym]
         End:
@@ -203,15 +205,16 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
           else:
             if actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Shift:
-              when defined(nimydebug):
-                echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
-              continue
-            if actionTable[idx].haskey(itm.ahead) and
+              echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
+              actionTable[idx][itm.ahead] = resolveShiftReduceConflict(itm.rule, 
+              itm.ahead.term, g, actionTable[idx][itm.ahead].state)
+              echo "Conflict resolved in favor of " & $actionTable[idx][itm.ahead]
+            elif actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Reduce: 
-              when defined(nimydebug):
-                echo "LALR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead & ".  This usually indicates a serious error in the grammar. It could also be due to the LALR table compression, where multiple reducible rules are placed into the same parser state and there is insufficient context to distinguish them. A possible solution is to add a bogus token to one of the rules to force it into a distinct parser state. Another possible solution is to rewrite the grammar rules to reduce ambiguity." 
+              echo "LALR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead & ".  This usually indicates a serious error in the grammar. It could also be due to the LALR table compression, where multiple reducible rules are placed into the same parser state and there is insufficient context to distinguish them. A possible solution is to add a bogus token to one of the rules to force it into a distinct parser state. Another possible solution is to rewrite the grammar rules to reduce ambiguity." 
               continue
-            actionTable[idx][itm.ahead] = Reduce[T](itm.rule)
+            else:
+              actionTable[idx][itm.ahead] = Reduce[T](itm.rule)
         _:
           discard
   when defined(nimydebug):
