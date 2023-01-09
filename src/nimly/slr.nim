@@ -166,6 +166,9 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
             echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
             actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, i)
             echo "Conflict resolved in favor of " & $actionTable[idx][sym]
+          elif actionTable[idx].haskey(sym) and
+            actionTable[idx][sym].kind == ActionTableItemKind.Error:
+            continue
           else:
             actionTable[idx][sym] = Shift[T](i)
         NonTermS: # goto nonterminals 
@@ -189,6 +192,9 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
               elif actionTable[idx].haskey(flw) and
                   actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
                 echo "SLR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $flw & ". This usually indicates a serious error in the grammar. Try unfactoring grammar to eliminate the conflict. As is, the first rule to get processed wins."
+              elif actionTable[idx].haskey(sym) and
+                actionTable[idx][sym].kind == ActionTableItemKind.Error:
+                continue
               else:
                 actionTable[idx][flw] = Reduce[T](item.rule)
         _:
