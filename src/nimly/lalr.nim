@@ -193,7 +193,7 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
           if actionTable[idx].haskey(sym) and
               actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
             echo "LALR:CONFLICT!!!" & $idx & ":" & $sym
-            actionTable[idx][sym] = resolveShiftReduceConflict(itm.rule, sym.term, g, tt[idx][sym])
+            actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, tt[idx][sym])
             echo "Resolved in favor of " & $actionTable[idx][sym]
           else:
             actionTable[idx][sym] = Shift[T](tt[idx][sym])

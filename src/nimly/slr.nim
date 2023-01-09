@@ -164,7 +164,7 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
           if actionTable[idx].haskey(sym) and
             actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
             echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
-            actionTable[idx][sym] = resolveShiftReduceConflict(item.rule, sym.term, g, i)
+            actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, i)
             echo "Conflict resolved in favor of " & $actionTable[idx][sym]
           else:
             actionTable[idx][sym] = Shift[T](i)
@@ -179,7 +179,6 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
             # this is the SLR reduction rule: give A -> a., only reduce 
             # if input is in FOLLOW(A)
             for flw in ag.followTable[item.rule.left]:
-              doAssert flw.kind == SymbolKind.TermS or flw.kind == SymbolKind.End
               if actionTable[idx].haskey(flw) and
                   actionTable[idx][flw].kind == ActionTableItemKind.Shift:
                 # we cannot shift the End symbol, so this has to be TermS
