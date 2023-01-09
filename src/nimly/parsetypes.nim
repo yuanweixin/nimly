@@ -312,10 +312,23 @@ proc getPrecedence*[T](g: Grammar[T], tok: string): Option[Precedence] =
     return some(prec)
   return none[Precedence]()
 
-proc getAssociativity*[T](g: Grammar[T], tok: string): Associativity = 
+proc getAssociativity*[T](g: Grammar[T], tok: string): Option[Associativity] = 
   if tok in g.precAssoc:
     let _,assoc = g.precAssoc[tok]
     return assoc 
-  return NonAssoc 
+  return none[Associativity]()
 
-
+proc getPrecedence*[T](g: Grammar[T], r: Rule[T]) : Option[Precedence] = 
+  if r.prec.isSome:
+    return r.prec
+  for i in countdown(r.len-1, 0):
+    case r.right[i].kind
+    of SymbolKind.TermS:
+      let prec,_ = 
+        g.precAssoc.getOrDefault(r.right[i].term, 
+                                (none[Precedence](), Left))
+      return prec 
+    else:
+      continue 
+  return none[Precedence]()
+  

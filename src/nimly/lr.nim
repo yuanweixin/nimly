@@ -164,7 +164,7 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
                 if actionTable[idx].haskey(flw) and
                    actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
                   when defined(nimydebug):
-                    echo "SLR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $flw
+                    echo "SLR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $flw & ". This usually indicates a serious error in the grammar. Try unfactoring grammar to eliminate the conflict."
                   continue
                 actionTable[idx][flw] = Reduce[T](item.rule)
         _:

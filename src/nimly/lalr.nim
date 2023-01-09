@@ -154,7 +154,25 @@ proc toLALRKernel[T](lrKernel: SetOfLRItems[T], g: Grammar[T],
         if not (result[idx].containsOrIncl(new)):
           newSet.incl(new)
     checkSet = newSet
-
+## terminal level precedence, support fake terminals (using string)
+## rule precedence: check override, fallback to last terminal
+## rule, token can have no precedence. 
+## 
+## reduce/reduce : choose the rule that appear first in the grammar. 
+##    emit warning too! 
+## 
+## shift/reduce : 
+##  one or both are none: shift  
+##  both have precedence: 
+##    token higher: shift
+##    rule higher: reduce
+##    else they have same precedence, start associativity check
+##      if left associative
+##        reduce 
+##      elif right associative
+##        shift 
+##      else: 
+##        this is an error 
 proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
   var
     actionTable: ActionTable[T]
@@ -206,12 +224,10 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
               when defined(nimydebug):
                 echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
               continue
-            # This could be the "mysterious LALR reduce reduce" conflict 
-            # TODO look up ways to solve this 
             if actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Reduce: 
               when defined(nimydebug):
-                echo "LALR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
+                echo "LALR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead & ".  This usually indicates a serious error in the grammar. It could also be due to the LALR table compression, where multiple reducible rules are placed into the same parser state and there is insufficient context to distinguish them. A possible solution is to add a bogus token to one of the rules to force it into a distinct parser state. Another possible solution is to rewrite the grammar rules to reduce ambiguity." 
               continue
             actionTable[idx][itm.ahead] = Reduce[T](itm.rule)
         _:
