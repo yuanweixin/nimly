@@ -224,7 +224,7 @@ proc parseLeft(clause: NimNode): (string, NimNode) =
   of Call([BracketExpr([(strVal: @nonTerm), @rType]), .._]):
     return (nonTerm, rType)
   else:
-    failwith "lhs is not in expected form, got " & treeRepr clause
+    failwith "lhs is not in expected form, got " & repr clause
   
 proc isSpecialVar(n: NimNode): bool =
   return n.matches(Prefix([Ident(strVal: "$"), IntLit()]))
@@ -510,7 +510,7 @@ proc validateRuleBody(n: NimNode) =
     if not c.validRhsSymType() and not c.validRuleLevelPrec():
       failwith "invalid rule body " & repr n
   else:
-    failwith "invalid rule body " & treeRepr n 
+    failwith "invalid rule body " & repr n 
 
 func validNestedTypeBracketExpr(n: NimNode) : bool = 
   var nd = n 
@@ -541,7 +541,7 @@ proc validateRule(n : NimNode) =
   of Prefix():
     failwith "invalid associativity declaration " & repr n 
   else:
-    failwith "invalid rule : " & treeRepr n
+    failwith "invalid rule : " & repr n
 
 proc validateBody(n : NimNode) = 
   doAssert n.kind == nnkStmtList 
@@ -566,7 +566,6 @@ iterator precAssocToks(n: NimNode): string =
   of Prefix([_, Command([_, Ident(strVal: @tok)])]):
     yield tok 
   of Prefix([_, Command([_, @rest is Command()])]):
-    echo treeRepr rest
     while rest.kind == nnkCommand:
       yield rest[0].strVal
       rest = rest[1]
