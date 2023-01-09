@@ -6,6 +6,7 @@ import patty
 
 import parsetypes
 import parser
+import std/options
 
 type
   LRItem*[T] = object
@@ -84,6 +85,26 @@ proc hash*[T](x: LRItem[T]): Hash =
   h = h !& hash(x.pos)
   return !$h
 
+proc resolveShiftReduceConflict*[T](r: Rule[T], t: T, g: Grammar[T], state: State): ActionTableItem[T] = 
+  let rp = g.getPrecedence(r)
+  let tp = g.getPrecedence($t)
+  if rp.isSome and tp.isSome:
+    if tp.get > rp.get:
+      return Shift[T](state)
+    elif rp.get > tp.get:
+      return Reduce[T](r)
+    else:
+      let assoc = g.getAssociativity($t)
+      doAssert assoc.isSome, "Bug in implementation: rule's precedence token must exist in grammar declaration's associativity declarations, and since it has same precedence as the lookahead, the lookahead must belong to the same line of associativity declaration. But no associativity exists."
+      case assoc.get 
+      of Left:
+        return Reduce[T](r)
+      of Right:
+        return Shift[T](state)
+      of NonAssoc:
+        return Error[T]()
+  return Shift[T](state)
+
 proc makeCanonicalCollection*[T](g: Grammar[T]): (SetOfLRItems[T],
                                                   TransTable[T]) =
   # seed C with the closure of start rule
@@ -139,11 +160,14 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
         TermS: # shift terminals
           let i = canonicalCollection.indexOf(ag.goto(itms, sym))
           assert i > -1,"There is no 'items' which is equal to 'goto'"
-          when defined(nimydebug):
-            if actionTable[idx].haskey(sym) and
-              actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
-              echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
-          actionTable[idx][sym] = Shift[T](i)
+
+          if actionTable[idx].haskey(sym) and
+            actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
+            echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
+            actionTable[idx][sym] = resolveShiftReduceConflict(item.rule, sym.term, g, i)
+            echo "Used precedence rules to resolve in favor of " & $actionTable[idx][sym]
+          else:
+            actionTable[idx][sym] = Shift[T](i)
         NonTermS: # goto nonterminals 
           let i = canonicalCollection.indexOf(ag.goto(itms, sym))
           assert i > -1, "There is no 'items' which is equal to 'goto'"
@@ -155,17 +179,18 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
             # this is the SLR reduction rule: give A -> a., only reduce 
             # if input is in FOLLOW(A)
             for flw in ag.followTable[item.rule.left]:
-              if flw.kind == SymbolKind.TermS or flw.kind == SymbolKind.End:
-                if actionTable[idx].haskey(flw) and
-                   actionTable[idx][flw].kind == ActionTableItemKind.Shift:
-                  when defined(nimydebug):
-                    echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $flw
-                  continue
-                if actionTable[idx].haskey(flw) and
-                   actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
-                  when defined(nimydebug):
-                    echo "SLR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $flw & ". This usually indicates a serious error in the grammar. Try unfactoring grammar to eliminate the conflict."
-                  continue
+              doAssert flw.kind == SymbolKind.TermS or flw.kind == SymbolKind.End
+              if actionTable[idx].haskey(flw) and
+                  actionTable[idx][flw].kind == ActionTableItemKind.Shift:
+                # we cannot shift the End symbol, so this has to be TermS
+                doAssert flw.kind == SymbolKind.TermS, "bug, Shift(End) is not possible"
+                echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $flw
+                actionTable[idx][flw] = resolveShiftReduceConflict(item.rule, flw.term, g, actionTable[idx][flw].state)
+                echo "Used precedence rules to resolve in favor of " & $actionTable[idx][flw]
+              elif actionTable[idx].haskey(flw) and
+                  actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
+                echo "SLR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $flw & ". This usually indicates a serious error in the grammar. Try unfactoring grammar to eliminate the conflict. As is, the first rule to get processed wins."
+              else:
                 actionTable[idx][flw] = Reduce[T](item.rule)
         _:
           when defined(nimy_debug):

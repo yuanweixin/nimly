@@ -154,25 +154,7 @@ proc toLALRKernel[T](lrKernel: SetOfLRItems[T], g: Grammar[T],
         if not (result[idx].containsOrIncl(new)):
           newSet.incl(new)
     checkSet = newSet
-## terminal level precedence, support fake terminals (using string)
-## rule precedence: check override, fallback to last terminal
-## rule, token can have no precedence. 
-## 
-## reduce/reduce : choose the rule that appear first in the grammar. 
-##    emit warning too! 
-## 
-## shift/reduce : 
-##  one or both are none: shift  
-##  both have precedence: 
-##    token higher: shift
-##    rule higher: reduce
-##    else they have same precedence, start associativity check
-##      if left associative
-##        reduce 
-##      elif right associative
-##        shift 
-##      else: 
-##        this is an error 
+
 proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
   var
     actionTable: ActionTable[T]

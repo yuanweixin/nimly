@@ -308,14 +308,14 @@ proc calFirsts*[T](g: Grammar[T],
 
 proc getPrecedence*[T](g: Grammar[T], tok: string): Option[Precedence] = 
   if tok in g.precAssoc:
-    let prec,_ = g.precAssoc[tok]
+    let (prec,_) = g.precAssoc[tok]
     return some(prec)
   return none[Precedence]()
 
 proc getAssociativity*[T](g: Grammar[T], tok: string): Option[Associativity] = 
   if tok in g.precAssoc:
-    let _,assoc = g.precAssoc[tok]
-    return assoc 
+    let (_,assoc) = g.precAssoc[tok]
+    return some(assoc)
   return none[Associativity]()
 
 proc getPrecedence*[T](g: Grammar[T], r: Rule[T]) : Option[Precedence] = 
@@ -324,10 +324,10 @@ proc getPrecedence*[T](g: Grammar[T], r: Rule[T]) : Option[Precedence] =
   for i in countdown(r.len-1, 0):
     case r.right[i].kind
     of SymbolKind.TermS:
-      let prec,_ = 
-        g.precAssoc.getOrDefault(r.right[i].term, 
-                                (none[Precedence](), Left))
-      return prec 
+      if $r.right[i].term in g.precAssoc:
+        let (prec, _) = g.precAssoc[$r.right[i].term]
+        return some(prec)
+      return none[Precedence]()
     else:
       continue 
   return none[Precedence]()
