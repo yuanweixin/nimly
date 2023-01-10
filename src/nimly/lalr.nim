@@ -45,6 +45,8 @@ proc `$`*[T](x: LALRItems[T]) : string =
         result.add "$"
       of SymbolKind.Empty:
         result.add "epsilon "
+      of SymbolKind.ErrorS:
+        result.add "error "
     if i.rule.prec.isSome:
       result.add " prec "
       result.add $i.rule.prec.get
@@ -56,6 +58,8 @@ proc `$`*[T](x: LALRItems[T]) : string =
     of SymbolKind.TermS:
       result.add $i.ahead.term
       result.add " "
+    of SymbolKind.ErrorS:
+      result.add "error "
     else:
       discard
     result.add " pos " 
