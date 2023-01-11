@@ -9,15 +9,8 @@ import parser
 import slr
 import std/options
 import std/strutils
+import debuginfo
 
-type
-  LALRItem[T] = object
-    rule: Rule[T]
-    pos: int
-    ahead: Symbol[T]
-  LALRItems[T] = HashSet[LALRItem[T]]
-  SetOfLALRItems[T] = OrderedTable[int, LALRItems[T]]
-  PropagateTable[T] = Table[LRItem[T], HashSet[(int, LRItem[T])]]
 
 proc initLALRItems[T](): LALRItems[T] =
   result = initHashSet[LALRItem[T]]()
@@ -27,47 +20,6 @@ proc initHashSetOfLALRItems[T](): SetOfLALRItems[T] =
 
 proc initPropagateTable[T](): PropagateTable[T] =
   result = initTable[LRItem[T], HashSet[(int, LRItem[T])]]()
-
-proc `$`*[T](i: LALRItem[T]) : string = 
-  result.add i.rule.left.nonTerm
-  result.add " -> "
-  for pos, r in i.rule.right:
-    if pos == i.pos:
-      result.add ". "
-    result.add $r
-    result.add " "
-  if i.pos == i.rule.right.len:
-    result.add ". "
-  result.add "\t\t"
-  result.add $i.ahead
-  if i.rule.prec.isSome:
-    result.add " prec "
-    result.add $i.rule.prec.get
-
-proc `$`*[T](i: LALRItems[T]) : string = 
-  for r in i:
-    result.add $r
-    result.add "\n"
-
-proc hash*[T](x: LALRItem[T]): Hash =
-  var h: Hash = 0
-  h = h !& hash(x.rule)
-  h = h !& hash(x.pos)
-  h = h !& hash(x.ahead)
-  return !$h
-
-proc next[T](i: LALRItem[T]): Symbol[T] =
-  if i.pos >= i.rule.len:
-    return End[T]()
-  result = i.rule.right[i.pos]
-
-proc nextSkipEmpty[T](i: LALRItem[T]): Symbol[T] =
-  result = End[T]()
-  for idx in i.pos..<i.rule.len:
-    let nxt = i.rule.right[idx]
-    if nxt != Empty[T]():
-      result = nxt
-      break
 
 proc fromNextNext[T](i: LALRItem[T]): seq[Symbol[T]] =
   result = @[]
@@ -102,8 +54,6 @@ proc closure[T](g: Grammar[T], single: LALRItem[T]): LALRItems[T] =
 proc toLALRItem[T](lrItem: LRItem[T], ahead: Symbol[T]): LALRItem[T] =
   result = LALRItem[T](rule: lrItem.rule, pos: lrItem.pos, ahead: ahead)
 
-proc toLRItem[T](lalrItem: LALRItem[T]): LRItem[T] =
-  result = LRItem[T](rule: lalrItem.rule, pos: lalrItem.pos)
 
 proc `[]`[T](pt: PropagateTable[T],
              itm: LALRItem[T]): HashSet[(int, LRItem[T])] =
@@ -194,12 +144,8 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
     (cc, tt) = makeCanonicalCollection[T](ag)
     knl = cc.filterKernel
     lalrKnl = knl.toLALRKernel(ag, tt)
-  when defined(nimydebug):
-    echo "[nimly] LALR automaton"
-    for idx, itms in lalrKnl:
-      echo "state " & $idx 
-      echo $ag.closure(itms)
-      echo "=============================="
+  var cntSR = 0 
+  var cntRR = 0 
   for idx, itms in lalrKnl:
     when defined(nimydebug):
       echo "[nimly] processing: Collection " & $(idx + 1) & "/" & $lalrKnl.len
@@ -223,6 +169,7 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
             when defined(nimyDebug):
               echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym 
               echo "Resolved in favor of " & $actionTable[idx][sym]
+            inc cntSR 
           elif actionTable[idx].haskey(sym) and
               actionTable[idx][sym].kind == ActionTableItemKind.Error:
             continue 
@@ -241,9 +188,11 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
               when defined(nimydebug):
                 echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
                 echo "Conflict resolved in favor of " & $actionTable[idx][itm.ahead]
+              inc cntSR 
             elif actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Reduce: 
               echo "LALR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead & ".  This usually indicates a serious error in the grammar. It could also be due to the LALR table compression, where multiple reducible rules are placed into the same parser state and there is insufficient context to distinguish them. A possible solution is to add a bogus token to one of the rules to force it into a distinct parser state. Another possible solution is to rewrite the grammar rules to reduce ambiguity." 
+              inc cntRR
               continue
             elif actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Error:
@@ -253,8 +202,18 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
         _:
           discard
   when defined(nimydebug):
-    echo "[nimly] done: make tables"
+    echo "\n\nDone making LALR tables"
+    echo "Debug info:"
+    echo $g
+    echo $cntSR & " shift-reduce conflict(s)"
+    echo $cntRR & " reduce-reduce conflict(s)"
+    echo "=============================="
+    echo "LALR automaton"
+    for idx, itms in lalrKnl:
+      echo "state " & $idx 
+      let clj = ag.closure(itms)
+      echo lalrItemsToString(clj, g, actionTable, gotoTable, idx)
+      echo "=============================="
+    echo actionTable 
+    echo gotoTable
   result = ParsingTable[T](action: actionTable, goto: gotoTable)
-  when defined(nimydebug):
-    echo "LALR:"
-    echo result

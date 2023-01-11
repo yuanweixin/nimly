@@ -6,6 +6,7 @@ import nimly/parser
 import nimly/slr
 import nimly/lalr
 import nimly/parsegen
+import nimly/debuginfo
 
 export lextypes.LexError
 export lextypes.LToken
@@ -14,6 +15,8 @@ export lextypes.LexData
 export lexgen
 
 export lexer
+
+export debuginfo.`$`
 
 export parsetypes.NimyError
 export parsetypes.NimyActionError
@@ -28,24 +31,19 @@ export parsetypes.hash
 export parsetypes.`==`
 export parsetypes.newrule
 export parsetypes.initGrammar
-export parsetypes.`$`
+export parsetypes.ParseTree
+export parsetypes.Parser
+export parsetypes.ParsingTable
 
-export parser.ParseTree
-export parser.ConstTable
-export parser.Parser
-export parser.ParsingTable
 export parser.parseImpl
 export parser.newParser
 export parser.init
 export parser.`$`
 
-export slr.hash
 export slr.makeCanonicalCollection
-export slr.makeTableLR
+export slr.makeTableSLR
 export slr.filterKernel
-export slr.`$`
 
-export lalr.hash
 export lalr.makeTableLALR
 
 export parsegen.RuleToProc

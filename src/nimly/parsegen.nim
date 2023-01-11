@@ -586,7 +586,7 @@ macro nimy*(head, body: untyped): untyped =
     tokenKind = ident(tokenType.strVal & "Kind")
     tableMaker = case parserType
         of Slr:
-          ident("makeTableLR")
+          ident("makeTableSLR")
         of Lalr:
           ident("makeTableLALR")
   body.validateBody()

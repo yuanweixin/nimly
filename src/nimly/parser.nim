@@ -7,22 +7,6 @@ import lextypes
 import lexer
 import parsetypes
 
-type
-  State* = int
-  ActionTableItemKind* {.pure.} = enum
-    Shift
-    Reduce
-    Accept
-    Error
-  ActionTableItem*[T] = object
-    case kind*: ActionTableItemKind:
-    of ActionTableItemKind.Shift:
-      state*: State
-    of ActionTableItemKind.Reduce:
-      rule*: Rule[T]
-    else:
-      discard
-
 proc `$`*[T](i: ActionTableItem[T]): string =
   match i:
     Shift(state: s):
@@ -34,7 +18,7 @@ proc `$`*[T](i: ActionTableItem[T]): string =
     Error:
       return "Error"
 
-proc Shift*[T](state: State): ActionTableItem[T] =
+proc Shift*[T](state: parsetypes.State): ActionTableItem[T] =
   return ActionTableItem[T](kind: ActionTableItemKind.Shift, state: state)
 
 proc Reduce*[T](rule: Rule[T]): ActionTableItem[T] =
@@ -46,42 +30,6 @@ proc Accept*[T](): ActionTableItem[T] =
 proc Error*[T](): ActionTableItem[T] =
   return ActionTableItem[T](kind: ActionTableItemKind.Error)
 
-type
-  ActionRow*[T] = Table[Symbol[T], ActionTableItem[T]]
-  ActionTable*[T] = Table[State, ActionRow[T]]
-  GotoRow*[T] = Table[Symbol[T], State]
-  GotoTable*[T] = Table[State, GotoRow[T]]
-  ParsingTable*[T] = object
-    action*: ActionTable[T]
-    goto*: GotoTable[T]
-  ConstActionTable = seq[seq[int]]
-  ConstGotoTable = seq[seq[int]]
-  ConstTable* = (ConstActionTable, ConstGotoTable)
-  ParserErrorState = enum
-    Err
-    Normal
-    Provisional # after recovery, stays in this until shifts 3 tokens ok
-  Parser*[T] = object
-    stack: seq[State]
-    table: ParsingTable[T]
-    provisionalToksCnt: int 
-    errState: ParserErrorState
-
-proc `$`*[T](at: ActionTable[T]): string =
-  result = "\nActionTable:\n--------\n"
-  for s, row in at:
-    result = result & $s & ":" & $row & "\n"
-  result = result & "--------\n"
-
-proc `$`*[T](gt: GotoTable[T]): string =
-  result = "\nGotoTable:\n--------\n"
-  for s, row in gt:
-    result = result & $s & ":" & $row & "\n"
-  result = result & "--------\n"
-
-variantp ParseTree[T, S]:
-  Terminal(token: T)
-  NonTerminal(rule: Rule[S], tree: seq[ParseTree[T, S]])
 
 proc `$`*[T, S](pt: ParseTree[T, S], indent: int = 0): string =
   match pt:
@@ -92,16 +40,16 @@ proc `$`*[T, S](pt: ParseTree[T, S], indent: int = 0): string =
       for n in t:
         result = result & `$`(n, indent + 1)
 
-proc add[T](parser: var Parser[T], s: State) =
+proc add[T](parser: var Parser[T], s: parsetypes.State) =
   parser.stack.add(s)
 
-proc push[T](parser: var Parser[T], s: State) =
+proc push[T](parser: var Parser[T], s: parsetypes.State) =
   parser.add(s)
 
-proc pop[T](parser: var Parser[T]): State =
+proc pop[T](parser: var Parser[T]): parsetypes.State =
   return parser.stack.pop
 
-proc top[T](parser: Parser[T]): State =
+proc top[T](parser: Parser[T]): parsetypes.State =
   return parser.stack[parser.stack.high]
 
 proc parseImpl*[T, S](parser: var Parser[S],
