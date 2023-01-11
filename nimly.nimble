@@ -11,3 +11,4 @@ srcDir        = "src"
 
 requires "nim >= 1.4.0"
 requires "patty >= 0.3.3"
+requires "https://github.com/yuanweixin/dotted"
