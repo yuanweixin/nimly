@@ -8,6 +8,7 @@ import parsetypes
 import parser
 import slr
 import std/options
+import std/strutils
 
 type
   LALRItem[T] = object
@@ -33,32 +34,12 @@ proc `$`*[T](i: LALRItem[T]) : string =
   for pos, r in i.rule.right:
     if pos == i.pos:
       result.add ". "
-    case r.kind
-    of SymbolKind.TermS:
-      result.add $r.term
-    of SymbolKind.NonTermS:
-      result.add $r.nonTerm
-    of SymbolKind.Dummy:
-      result.add "#"
-    of SymbolKind.End:
-      result.add "$"
-    of SymbolKind.Empty:
-      result.add "epsilon"
-    of SymbolKind.ErrorS:
-      result.add "error"
+    result.add $r
     result.add " "
   if i.pos == i.rule.right.len:
     result.add ". "
-  result.add "\t"
-  case i.ahead.kind
-  of SymbolKind.End:
-    result.add "$"
-  of SymbolKind.TermS:
-    result.add $i.ahead.term
-  of SymbolKind.ErrorS:
-    result.add "error"
-  else:
-    discard
+  result.add "\t\t"
+  result.add $i.ahead
   if i.rule.prec.isSome:
     result.add " prec "
     result.add $i.rule.prec.get
@@ -214,10 +195,10 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
     knl = cc.filterKernel
     lalrKnl = knl.toLALRKernel(ag, tt)
   when defined(nimydebug):
-    echo "[nimly] done: make lalrkernel"
-    for idx, state in lalrKnl:
+    echo "[nimly] LALR automaton"
+    for idx, itms in lalrKnl:
       echo "state " & $idx 
-      echo $state
+      echo $ag.closure(itms)
       echo "=============================="
   for idx, itms in lalrKnl:
     when defined(nimydebug):
