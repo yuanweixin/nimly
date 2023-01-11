@@ -83,6 +83,29 @@ proc TermS*[T](term: T): Symbol[T] =
 proc ErrorS*[T]() : Symbol[T] = 
   return Symbol[T](kind: SymbolKind.ErrorS)
 
+proc `$`*[T](r: Symbol[T]) : string = 
+  case r.kind
+    of SymbolKind.TermS:
+      result.add $r.term
+    of SymbolKind.NonTermS:
+      result.add $r.nonTerm
+    of SymbolKind.Dummy:
+      result.add "#"
+    of SymbolKind.End:
+      result.add "$"
+    of SymbolKind.Empty:
+      result.add "epsilon"
+    of SymbolKind.ErrorS:
+      result.add "error"
+
+proc `$`*[T](rule: Rule[T]) : string = 
+  result.add rule.left.nonTerm
+  result.add " -> "
+  for i,r in rule.right:
+    result.add $r
+    if i < rule.right.len-1:
+      result.add " " 
+
 proc `$`*[T](ft: FollowTable[T]): string =
   result = "\n--------\n"
   for i, itms in ft:
