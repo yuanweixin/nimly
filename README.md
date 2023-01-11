@@ -40,7 +40,7 @@ This library started life as a fork of [nimly](https://github.com/loloicci/nimly
 Usage
 ====
 
-TODO
+TODO code examples below are WIP and probably do not reflect current state 
 
 macro nimy
 ----------
