@@ -57,9 +57,15 @@ type
   ConstActionTable = seq[seq[int]]
   ConstGotoTable = seq[seq[int]]
   ConstTable* = (ConstActionTable, ConstGotoTable)
+  ParserErrorState = enum
+    Err
+    Normal
+    Provisional # after recovery, stays in this until shifts 3 tokens ok
   Parser*[T] = object
     stack: seq[State]
     table: ParsingTable[T]
+    provisionalToksCnt: int 
+    errState: ParserErrorState
 
 proc `$`*[T](at: ActionTable[T]): string =
   result = "\nActionTable:\n--------\n"
@@ -167,13 +173,14 @@ proc parseImpl*[T, S](parser: var Parser[S],
         else:
           echo tree
       doAssert tree.len == 1, "Error, parsing result is wrong."
-      return NonTerminal[T, S](rule = Rule[S](), tree = tree)
+      return NonTerminal[T, S](rule = Rule[S](), tree =tree)
     of ActionTableItemKind.Error:
+      
       doAssert false, "Error, Must be implemented."
   assert false, "Something wrong with parser."
 
 proc newParser*[T](t: ParsingTable[T]): Parser[T] =
-  result = Parser[T](stack: @[0], table: t)
+  result = Parser[T](stack: @[0], table: t, provisionalToksCnt: 0, errState: Normal)
   result.init()
 
 proc init*[T](p: var Parser[T]) =

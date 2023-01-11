@@ -17,6 +17,8 @@ type
     Dummy # '#' in dragon book for computing propagated lookahead 
     End   # '$' endmarker in dragon book. 
     Empty # epsilon 
+    ErrorS # the error token for implementing panic recovery
+
   Symbol*[T] = object
     case kind*: SymbolKind
     of SymbolKind.TermS:
@@ -77,6 +79,32 @@ proc Empty*[T](): Symbol[T] =
 
 proc TermS*[T](term: T): Symbol[T] =
   return Symbol[T](kind: SymbolKind.TermS, term: term)
+
+proc ErrorS*[T]() : Symbol[T] = 
+  return Symbol[T](kind: SymbolKind.ErrorS)
+
+proc `$`*[T](r: Symbol[T]) : string = 
+  case r.kind
+    of SymbolKind.TermS:
+      result.add $r.term
+    of SymbolKind.NonTermS:
+      result.add $r.nonTerm
+    of SymbolKind.Dummy:
+      result.add "#"
+    of SymbolKind.End:
+      result.add "$"
+    of SymbolKind.Empty:
+      result.add "epsilon"
+    of SymbolKind.ErrorS:
+      result.add "error"
+
+proc `$`*[T](rule: Rule[T]) : string = 
+  result.add rule.left.nonTerm
+  result.add " -> "
+  for i,r in rule.right:
+    result.add $r
+    if i < rule.right.len-1:
+      result.add " " 
 
 proc `$`*[T](ft: FollowTable[T]): string =
   result = "\n--------\n"
@@ -186,6 +214,9 @@ proc makeFirstTable[T](g: Grammar[T]): FirstTable[T] =
         result[s] = [s].toHashSet
       Empty: # shows up if Empty is on the rhs of some X -> Y1...Yk 
         result[s] = [s].toHashSet
+      ErrorS:
+        # error symbol is treated as a terminal for parser generation
+        result[s] = [s].toHashset 
       _:
         doAssert false, "There is a non-symbol in rules."
 
@@ -236,6 +267,10 @@ proc makeFollowTable[T](g: Grammar[T]): FollowTable[T] =
         # A -> aBb, everything in FIRST(b)-{Empty} is in FOLLOW(B)
         match sym:
           TermS:
+            # renew meta data
+            fEmpTail = false
+            firstSyms = [sym].toHashSet
+          ErrorS:
             # renew meta data
             fEmpTail = false
             firstSyms = [sym].toHashSet
@@ -301,6 +336,9 @@ proc calFirsts*[T](g: Grammar[T],
       Dummy:
         result.incl(s)
         return
+      ErrorS:
+        result.incl(s)
+        return 
       Empty:
         raise newException(
           NimyError,

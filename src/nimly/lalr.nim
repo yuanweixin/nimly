@@ -8,6 +8,7 @@ import parsetypes
 import parser
 import slr
 import std/options
+import std/strutils
 
 type
   LALRItem[T] = object
@@ -27,39 +28,25 @@ proc initHashSetOfLALRItems[T](): SetOfLALRItems[T] =
 proc initPropagateTable[T](): PropagateTable[T] =
   result = initTable[LRItem[T], HashSet[(int, LRItem[T])]]()
 
-proc `$`*[T](x: LALRItems[T]) : string = 
-  for i in x:
-    result.add i.rule.left.nonTerm
-    result.add " -> "
-    for r in i.rule.right:
-      case r.kind
-      of SymbolKind.TermS:
-        result.add $r.term
-        result.add " "
-      of SymbolKind.NonTermS:
-        result.add $r.nonTerm
-        result.add " "
-      of SymbolKind.Dummy:
-        result.add "# "
-      of SymbolKind.End:
-        result.add "$"
-      of SymbolKind.Empty:
-        result.add "epsilon "
-    if i.rule.prec.isSome:
-      result.add " prec "
-      result.add $i.rule.prec.get
-    result.add " ahead: "
+proc `$`*[T](i: LALRItem[T]) : string = 
+  result.add i.rule.left.nonTerm
+  result.add " -> "
+  for pos, r in i.rule.right:
+    if pos == i.pos:
+      result.add ". "
+    result.add $r
+    result.add " "
+  if i.pos == i.rule.right.len:
+    result.add ". "
+  result.add "\t\t"
+  result.add $i.ahead
+  if i.rule.prec.isSome:
+    result.add " prec "
+    result.add $i.rule.prec.get
 
-    case i.ahead.kind
-    of SymbolKind.End:
-      result.add "$ "
-    of SymbolKind.TermS:
-      result.add $i.ahead.term
-      result.add " "
-    else:
-      discard
-    result.add " pos " 
-    result.add $i.pos
+proc `$`*[T](i: LALRItems[T]) : string = 
+  for r in i:
+    result.add $r
     result.add "\n"
 
 proc hash*[T](x: LALRItem[T]): Hash =
@@ -208,7 +195,11 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
     knl = cc.filterKernel
     lalrKnl = knl.toLALRKernel(ag, tt)
   when defined(nimydebug):
-    echo "[nimly] done: make lalrkernel"
+    echo "[nimly] LALR automaton"
+    for idx, itms in lalrKnl:
+      echo "state " & $idx 
+      echo $ag.closure(itms)
+      echo "=============================="
   for idx, itms in lalrKnl:
     when defined(nimydebug):
       echo "[nimly] processing: Collection " & $(idx + 1) & "/" & $lalrKnl.len

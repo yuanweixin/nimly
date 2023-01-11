@@ -82,9 +82,13 @@ proc convertToSymNode(name: string, kindTy: NimNode,
     result = quote do:
       NonTermS[`kindTy`](`nameStrLit`)
   elif name.isTerm(nimyInfo):
-    let nameId = ident(name)
-    result = quote do:
-      TermS[`kindTy`](`kindTy`.`nameId`)
+    if name == "error":
+      result = quote do:
+        ErrorS[`kindTy`]()
+    else:
+      let nameId = ident(name)
+      result = quote do:
+        TermS[`kindTy`](`kindTy`.`nameId`)
   else:
     doAssert false
 
@@ -520,18 +524,23 @@ func validNestedTypeBracketExpr(n: NimNode) : bool =
     nd = nd[1]
   return nd.kind == nnkIdent
 
+func validToken(n: NimNode) : bool = 
+  return n.matches(Ident(strVal: != "error"))
+
 proc validateRule(n : NimNode) = 
   case n 
-  of Prefix([Ident(strVal: "%"), Command([_.validAssociativity(), Ident()])]):
+  of Prefix([Ident(strVal: "%"), Command([_.validAssociativity(), _.validToken()])]):
     discard
   of Prefix([Ident(strVal: "%"), Command([_.validAssociativity(), @rest is Command()])]):
     while rest.kind == nnkCommand:
-      if rest[0].kind != nnkIdent:
+      if not rest[0].validToken():
         failwith "invalid associativity declaration " & repr n 
       rest = rest[1]
-    if rest.kind != nnkIdent:
+    if not rest.validToken():
       failwith "invalid associativity declaration " & repr n 
-  of Call([BracketExpr([Ident(), @idOrNestedType is Ident()|BracketExpr()]), @rest is StmtList()]): # top[string] vs top[seq[string]]
+  of Call([BracketExpr([Ident(strVal: @lhs), @idOrNestedType is Ident()|BracketExpr()]), @rest is StmtList()]): # top[string] vs top[seq[string]]
+    if lhs == "error":
+      failwith "'error' is reserved for error symbol, cannot use it as a nonterminal, but got " & repr n
     if idOrNestedType.kind == nnkBracketExpr and not idOrNestedType.validNestedTypeBracketExpr():
       failwith "Invalid return type declaration in: " & repr n
     for ruleBody in rest:
