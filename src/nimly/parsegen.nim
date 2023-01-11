@@ -528,9 +528,6 @@ func validToken(n: NimNode) : bool =
   return n.matches(Ident(strVal: != "error"))
 
 proc validateRule(n : NimNode) = 
-  # should not write 'error' as a lhs 
-  # 'error' not in the assoc decl
-  # 'error' 
   case n 
   of Prefix([Ident(strVal: "%"), Command([_.validAssociativity(), _.validToken()])]):
     discard
