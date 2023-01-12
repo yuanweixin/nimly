@@ -12,9 +12,9 @@ This library started life as a fork of [nimly](https://github.com/loloicci/nimly
 ## Here's a list of the added functionalities: 
 * Support for bison style %left, %right, %nonassoc declarations, as well as rule level %prec declarations to use in conflict resolution. 
 * Output text description of the grammar, conflict count, parser automaton, when -d:nimydebug is defined. 
+* Output dot file of the parser automaton, when -d:nimygraphviz is passed. 
 
   ### WIP
-* Output dot file of the parser automaton, in a format similar to bison's. 
 * Replace the original lexer code by [lexim](https://github.com/yuanweixin/lexim) which is a high performance scanner library. The original lexer code ran slower, was implemented in a way that ran too long at compile time, and had a bug where it crashes if a token does not fit the buffer. 
 * Ad hoc error recovery using error token similar to bison, which is very important for any practical use of a parsing library. 
 

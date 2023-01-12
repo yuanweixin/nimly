@@ -10,7 +10,7 @@ import slr
 import std/options
 import std/strutils
 import debuginfo
-
+import dotted
 
 proc initLALRItems[T](): LALRItems[T] =
   result = initHashSet[LALRItem[T]]()
@@ -162,6 +162,8 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
       inc(cnt)
       let sym = itm.nextSkipEmpty
       match sym:
+        ErrorS:
+          actionTable[idx][sym] = Shift[T](tt[idx][sym])
         TermS:
           if actionTable[idx].haskey(sym) and
               actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
@@ -201,6 +203,7 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
               actionTable[idx][itm.ahead] = Reduce[T](itm.rule)
         _:
           discard
+
   when defined(nimydebug):
     echo "\n\nDone making LALR tables"
     echo "Debug info:"
@@ -216,4 +219,14 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
       echo "=============================="
     echo actionTable 
     echo gotoTable
+
+  when defined(nimygraphviz):
+    var dg = emptyDotGraph()
+    # repeat closure calculation in nimydebug...
+    # oh well. 
+    for idx, itms in lalrKnl:
+      let clj = ag.closure(itms)
+      populateDotGraph(dg, clj, g, actionTable, gotoTable, idx)
+    echo dg.render    
+
   result = ParsingTable[T](action: actionTable, goto: gotoTable)

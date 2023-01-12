@@ -8,6 +8,7 @@ import parsetypes
 import parser
 import std/options
 import debuginfo
+import dotted
 
 proc initTransTableRow[T](): Table[Symbol[T], int] =
   result = initTable[Symbol[T], int]()
@@ -125,15 +126,20 @@ proc makeTableSLR*[T](g: Grammar[T]): ParsingTable[T] =
     for item in itms:
       let sym = item.nextSkipEmpty
       match sym:
+        ErrorS:
+          let i = canonicalCollection.indexOf(ag.goto(itms, sym))
+          assert i > -1,"There is no 'items' which is equal to 'goto'"
+          actionTable[idx][sym] = Shift[T](i)
         TermS: # shift terminals
           let i = canonicalCollection.indexOf(ag.goto(itms, sym))
           assert i > -1,"There is no 'items' which is equal to 'goto'"
 
           if actionTable[idx].haskey(sym) and
             actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
-            echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
             actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, i)
-            echo "Conflict resolved in favor of " & $actionTable[idx][sym]
+            when defined(nimydebug):
+              echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
+              echo "Conflict resolved in favor of " &   $actionTable[idx][sym]
             inc cntSR 
           elif actionTable[idx].haskey(sym) and
             actionTable[idx][sym].kind == ActionTableItemKind.Error:
@@ -155,9 +161,12 @@ proc makeTableSLR*[T](g: Grammar[T]): ParsingTable[T] =
                   actionTable[idx][flw].kind == ActionTableItemKind.Shift:
                 # we cannot shift the End symbol, so this has to be TermS
                 doAssert flw.kind == SymbolKind.TermS, "bug, Shift(End) is not possible"
-                echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $flw
+
                 actionTable[idx][flw] = resolveShiftReduceConflict(item.rule, flw.term, g, actionTable[idx][flw].state)
-                echo "Conflict resolved in favor of " & $actionTable[idx][flw]
+
+                when defined(nimydebug):
+                  echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $flw
+                  echo "Conflict resolved in favor of " & $actionTable[idx][flw]
                 inc cntSR 
               elif actionTable[idx].haskey(flw) and
                   actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
@@ -172,7 +181,7 @@ proc makeTableSLR*[T](g: Grammar[T]): ParsingTable[T] =
           when defined(nimydebug):
             echo "SLR: OTHER (" & $sym & ")"
           discard
-  result = ParsingTable[T](action: actionTable, goto: gotoTable)
+
   when defined(nimydebug):
     echo "\n\nDone making SLR tables"
     echo "Debug info:"
@@ -188,6 +197,13 @@ proc makeTableSLR*[T](g: Grammar[T]): ParsingTable[T] =
     echo actionTable
     echo gotoTable
 
+  when defined(nimygraphviz):
+    var dg = emptyDotGraph()
+    for idx, itms in canonicalCollection:
+      populateDotGraph(dg, itms, g, actionTable, gotoTable, idx)
+    echo dg.render()
+
+  result = ParsingTable[T](action: actionTable, goto: gotoTable)
 proc filterKernel*[T](cc: SetOfLRItems[T]): SetOfLRItems[T] =
   result = initOrderedSet[LRItems[T]]()
   let start = NonTermS[T]("__Start__")

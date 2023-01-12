@@ -107,6 +107,7 @@ variantp ParseTree[T, S]:
   Terminal(token: T)
   NonTerminal(rule: Rule[S], tree: seq[ParseTree[T, S]])
 
+
 proc len*[T](r: Rule[T]): int =
   return r.right.len
 

@@ -123,7 +123,6 @@ proc parseImpl*[T, S](parser: var Parser[S],
       doAssert tree.len == 1, "Error, parsing result is wrong."
       return NonTerminal[T, S](rule = Rule[S](), tree =tree)
     of ActionTableItemKind.Error:
-      
       doAssert false, "Error, Must be implemented."
   assert false, "Something wrong with parser."
 
