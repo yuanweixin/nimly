@@ -41,14 +41,72 @@ type
   Precedence* = int 
 
   Grammar*[T] = object
-    rules*: HashSet[Rule[T]]
+    rules*: OrderedSet[Rule[T]]
     start*: Symbol[T]
     firstTable*: FirstTable[T]
     followTable*: FollowTable[T]
     precAssoc*: Table[string,(Precedence, Associativity)]
 
-  FollowTable[T] = Table[Symbol[T], HashSet[Symbol[T]]]
-  FirstTable[T] = Table[Symbol[T], HashSet[Symbol[T]]]
+  FollowTable*[T] = Table[Symbol[T], HashSet[Symbol[T]]]
+  FirstTable*[T] = Table[Symbol[T], HashSet[Symbol[T]]]
+
+type
+  LRItem*[T] = object
+    rule*: Rule[T]
+    pos*: int
+
+  LRItems*[T] = HashSet[LRItem[T]] 
+  SetOfLRItems*[T] = OrderedSet[LRItems[T]]
+
+  TransTable*[T] = seq[Table[Symbol[T], int]]
+
+type
+  LALRItem*[T] = object
+    rule*: Rule[T]
+    pos*: int
+    ahead*: Symbol[T]
+  LALRItems*[T] = HashSet[LALRItem[T]]
+  SetOfLALRItems*[T] = OrderedTable[int, LALRItems[T]]
+  PropagateTable*[T] = Table[LRItem[T], HashSet[(int, LRItem[T])]]
+
+type
+  State* = int
+  ActionTableItemKind* {.pure.} = enum
+    Shift
+    Reduce
+    Accept
+    Error
+  ActionTableItem*[T] = object
+    case kind*: ActionTableItemKind:
+    of ActionTableItemKind.Shift:
+      state*: State
+    of ActionTableItemKind.Reduce:
+      rule*: Rule[T]
+    else:
+      discard
+
+type
+  ActionRow*[T] = Table[Symbol[T], ActionTableItem[T]]
+  ActionTable*[T] = Table[State, ActionRow[T]]
+  GotoRow*[T] = Table[Symbol[T], State]
+  GotoTable*[T] = Table[State, GotoRow[T]]
+  ParsingTable*[T] = object
+    action*: ActionTable[T]
+    goto*: GotoTable[T]
+  ParserErrorState* = enum
+    Err
+    Normal
+    Provisional # after recovery, stays in this until shifts 3 tokens ok
+  Parser*[T] = object
+    stack: seq[State]
+    table: ParsingTable[T]
+    provisionalToksCnt: int 
+    errState: ParserErrorState
+
+variantp ParseTree[T, S]:
+  Terminal(token: T)
+  NonTerminal(rule: Rule[S], tree: seq[ParseTree[T, S]])
+
 
 proc len*[T](r: Rule[T]): int =
   return r.right.len
@@ -83,35 +141,6 @@ proc TermS*[T](term: T): Symbol[T] =
 proc ErrorS*[T]() : Symbol[T] = 
   return Symbol[T](kind: SymbolKind.ErrorS)
 
-proc `$`*[T](r: Symbol[T]) : string = 
-  case r.kind
-    of SymbolKind.TermS:
-      result.add $r.term
-    of SymbolKind.NonTermS:
-      result.add $r.nonTerm
-    of SymbolKind.Dummy:
-      result.add "#"
-    of SymbolKind.End:
-      result.add "$"
-    of SymbolKind.Empty:
-      result.add "epsilon"
-    of SymbolKind.ErrorS:
-      result.add "error"
-
-proc `$`*[T](rule: Rule[T]) : string = 
-  result.add rule.left.nonTerm
-  result.add " -> "
-  for i,r in rule.right:
-    result.add $r
-    if i < rule.right.len-1:
-      result.add " " 
-
-proc `$`*[T](ft: FollowTable[T]): string =
-  result = "\n--------\n"
-  for i, itms in ft:
-    result = result & $i & ":" & $itms & "\n"
-  result = result & "--------\n"
-
 proc hash*[T](x: Symbol[T]): Hash =
   var h: Hash = 0
   h = h !& hash(x.kind)
@@ -129,6 +158,19 @@ proc hash*[T](x: Rule[T]): Hash =
   h = h !& hash(x.left)
   h = h !& hash(x.right)
   h = h !& hash(x.prec)
+  return !$h
+
+proc hash*[T](x: LRItem[T]): Hash =
+  var h: Hash = 0
+  h = h !& hash(x.rule)
+  h = h !& hash(x.pos)
+  return !$h
+
+proc hash*[T](x: LALRItem[T]): Hash =
+  var h: Hash = 0
+  h = h !& hash(x.rule)
+  h = h !& hash(x.pos)
+  h = h !& hash(x.ahead)
   return !$h
 
 proc lenWithoutEmpty*[T](r: Rule[T]): int =
@@ -158,12 +200,12 @@ proc newRule*[T](prec: Option[Precedence], left: Symbol[T], right: Symbol[T]): R
      "Left side of rule must be Non-Terminal Symbol."
   result = Rule[T](left: left, right: @[right], prec: prec)
 
-proc initGrammar*[T](rules: HashSet[Rule[T]], start: Symbol[T]): Grammar[T] =
+proc initGrammar*[T](rules: OrderedSet[Rule[T]], start: Symbol[T]): Grammar[T] =
   result = Grammar[T](rules: rules, start: start)
 
 proc initGrammar*[T](rules: openArray[Rule[T]],
                      start: Symbol[T]): Grammar[T] =
-  result = initGrammar(rules.toHashSet, start)
+  result = initGrammar(rules.toOrderedSet, start)
 
 proc filterRulesLeftIs*[T](g: Grammar[T], x: Symbol[T]): seq[Rule[T]] =
   result = @[]
@@ -310,7 +352,10 @@ proc augment*[T](g: Grammar[T]): Grammar[T] =
   if g.rules.contains(startRule):
     result = initGrammar(g.rules, start)
   else:
-    let newRules = g.rules + [startRule].toHashSet()
+    var newRules : OrderedSet[Rule[T]] 
+    newRules.incl startRule
+    for r in g.rules:
+      newRules.incl r
     result = initGrammar(newRules, start)
   result.firstTable = result.makeFirstTable
   result.followTable = result.makeFollowTable
@@ -370,4 +415,33 @@ proc getPrecedence*[T](g: Grammar[T], r: Rule[T]) : Option[Precedence] =
     else:
       continue 
   return none[Precedence]()
-  
+
+proc next*[T](i: LRItem[T]): Symbol[T] =
+  ## symbol to the right of the dot 
+  if i.pos >= i.rule.len:
+    return End[T]()
+  result = i.rule.right[i.pos]
+
+proc nextSkipEmpty*[T](i: LRItem[T]): Symbol[T] =
+  result = End[T]()
+  for idx in i.pos..<i.rule.len:
+    let nxt = i.rule.right[idx]
+    if nxt != Empty[T]():
+      result = nxt
+      break
+
+proc next*[T](i: LALRItem[T]): Symbol[T] =
+  if i.pos >= i.rule.len:
+    return End[T]()
+  result = i.rule.right[i.pos]
+
+proc nextSkipEmpty*[T](i: LALRItem[T]): Symbol[T] =
+  result = End[T]()
+  for idx in i.pos..<i.rule.len:
+    let nxt = i.rule.right[idx]
+    if nxt != Empty[T]():
+      result = nxt
+      break
+
+proc toLRItem*[T](lalrItem: LALRItem[T]): LRItem[T] =
+  result = LRItem[T](rule: lalrItem.rule, pos: lalrItem.pos)

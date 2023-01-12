@@ -7,16 +7,8 @@ import patty
 import parsetypes
 import parser
 import std/options
-
-type
-  LRItem*[T] = object
-    rule*: Rule[T]
-    pos*: int
-
-  LRItems*[T] = HashSet[LRItem[T]]
-  SetOfLRItems*[T] = OrderedSet[LRItems[T]]
-
-  TransTable*[T] = seq[Table[Symbol[T], int]]
+import debuginfo
+import dotted
 
 proc initTransTableRow[T](): Table[Symbol[T], int] =
   result = initTable[Symbol[T], int]()
@@ -26,26 +18,6 @@ proc indexOf[T](os: OrderedSet[T], element: T): int =
     if key == element:
       return i
   return -1
-
-proc `$`*[T](s: SetOfLRItems[T]): string =
-  result = "CanonicalCollection:\n--------\n"
-  for i, itms in s:
-    result = result & $i & ":" & $itms & "\n"
-  result = result & "--------\n"
-
-proc next[T](i: LRItem[T]): Symbol[T] =
-  ## symbol to the right of the dot 
-  if i.pos >= i.rule.len:
-    return End[T]()
-  result = i.rule.right[i.pos]
-
-proc nextSkipEmpty[T](i: LRItem[T]): Symbol[T] =
-  result = End[T]()
-  for idx in i.pos..<i.rule.len:
-    let nxt = i.rule.right[idx]
-    if nxt != Empty[T]():
-      result = nxt
-      break
 
 proc pointForward[T](i: LRItem[T]): LRItem[T] =
   ## move dot up by 1 
@@ -79,11 +51,6 @@ proc goto[T](g: Grammar[T], itms: LRItems[T], s: Symbol[T]): LRItems[T] =
       gotoHashSet.incl(i.pointForward)
   result = g.closure(gotoHashSet)
 
-proc hash*[T](x: LRItem[T]): Hash =
-  var h: Hash = 0
-  h = h !& hash(x.rule)
-  h = h !& hash(x.pos)
-  return !$h
 
 proc resolveShiftReduceConflict*[T](r: Rule[T], t: T, g: Grammar[T], state: State): ActionTableItem[T] = 
   let rp = g.getPrecedence(r)
@@ -138,7 +105,7 @@ proc makeCanonicalCollection*[T](g: Grammar[T]): (SetOfLRItems[T],
   doAssert cc.indexOf(init) == 0, "init state is not '0'"
   result = (cc, tt)
 
-proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
+proc makeTableSLR*[T](g: Grammar[T]): ParsingTable[T] =
   ## This produces the SLR table. 
   var
     actionTable: ActionTable[T]
@@ -151,21 +118,29 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
          else:
            g.augment
     (canonicalCollection, _) = makeCanonicalCollection[T](ag)
+  var cntSR = 0 
+  var cntRR = 0 
   for idx, itms in canonicalCollection:
     actionTable[idx] = initTable[Symbol[T], ActionTableItem[T]]()
     gotoTable[idx] = initTable[Symbol[T], State]()
     for item in itms:
       let sym = item.nextSkipEmpty
       match sym:
+        ErrorS:
+          let i = canonicalCollection.indexOf(ag.goto(itms, sym))
+          assert i > -1,"There is no 'items' which is equal to 'goto'"
+          actionTable[idx][sym] = Shift[T](i)
         TermS: # shift terminals
           let i = canonicalCollection.indexOf(ag.goto(itms, sym))
           assert i > -1,"There is no 'items' which is equal to 'goto'"
 
           if actionTable[idx].haskey(sym) and
             actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
-            echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
             actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, i)
-            echo "Conflict resolved in favor of " & $actionTable[idx][sym]
+            when defined(nimydebug):
+              echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
+              echo "Conflict resolved in favor of " &   $actionTable[idx][sym]
+            inc cntSR 
           elif actionTable[idx].haskey(sym) and
             actionTable[idx][sym].kind == ActionTableItemKind.Error:
             continue
@@ -186,28 +161,49 @@ proc makeTableLR*[T](g: Grammar[T]): ParsingTable[T] =
                   actionTable[idx][flw].kind == ActionTableItemKind.Shift:
                 # we cannot shift the End symbol, so this has to be TermS
                 doAssert flw.kind == SymbolKind.TermS, "bug, Shift(End) is not possible"
-                echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $flw
+
                 actionTable[idx][flw] = resolveShiftReduceConflict(item.rule, flw.term, g, actionTable[idx][flw].state)
-                echo "Conflict resolved in favor of " & $actionTable[idx][flw]
+
+                when defined(nimydebug):
+                  echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $flw
+                  echo "Conflict resolved in favor of " & $actionTable[idx][flw]
+                inc cntSR 
               elif actionTable[idx].haskey(flw) and
                   actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
                 echo "SLR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $flw & ". This usually indicates a serious error in the grammar. Try unfactoring grammar to eliminate the conflict. As is, the first rule to get processed wins."
+                inc cntRR
               elif actionTable[idx].haskey(sym) and
                 actionTable[idx][sym].kind == ActionTableItemKind.Error:
                 continue
               else:
                 actionTable[idx][flw] = Reduce[T](item.rule)
         _:
-          when defined(nimy_debug):
+          when defined(nimydebug):
             echo "SLR: OTHER (" & $sym & ")"
           discard
-  result = ParsingTable[T](action: actionTable, goto: gotoTable)
-  when defined(nimydebug):
-    echo "SLR:"
-    echo ag.followTable
-    echo canonicalCollection
-    echo result
 
+  when defined(nimydebug):
+    echo "\n\nDone making SLR tables"
+    echo "Debug info:"
+    echo $g
+    echo $cntSR & " shift-reduce conflict(s)"
+    echo $cntRR & " reduce-reduce conflict(s)"
+    echo "=============================="
+    echo "SLR automaton"
+    for idx, itms in canonicalCollection:
+      echo "state " & $idx 
+      echo lrItemsToString(itms, g, actionTable, gotoTable, idx)
+      echo "=============================="
+    echo actionTable
+    echo gotoTable
+
+  when defined(nimygraphviz):
+    var dg = emptyDotGraph()
+    for idx, itms in canonicalCollection:
+      populateDotGraph(dg, itms, g, actionTable, gotoTable, idx)
+    echo dg.render()
+
+  result = ParsingTable[T](action: actionTable, goto: gotoTable)
 proc filterKernel*[T](cc: SetOfLRItems[T]): SetOfLRItems[T] =
   result = initOrderedSet[LRItems[T]]()
   let start = NonTermS[T]("__Start__")
