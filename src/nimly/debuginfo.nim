@@ -4,6 +4,8 @@ import std/options
 import std/tables
 import std/sets
 
+type RuleIdx = int 
+
 proc `$`*[T](s: SetOfLRItems[T]): string =
   result = "CanonicalCollection:\n--------\n"
   for i, itms in s:
@@ -148,30 +150,34 @@ proc populateDotGraph*[T](gr: var Graph, itms: LRItems[T], g: Grammar[T], at: va
 
 proc populateDotGraph*[T](gr: var Graph, itms: LALRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
   var ns = "State " & $state & "\\n\\l "
-  # collapse same rule, diff lookahead into 1 entry 
-  var ruleIdxToLookaheads : Table[int, seq[Symbol[T]]]
+  # collapse multiple (rule,pos) with diff lookahead into 1 entry 
+  var rulePosToLookaheads : Table[(RuleIdx,int), HashSet[Symbol[T]]]
   # prevent duplicate edges
   var populatedTransitions : HashSet[Symbol[T]]
   for i in itms:
     let ruleIdx = findRuleIdx(g, i.rule)
-    if ruleIdx notin ruleIdxToLookaheads:
-      ruleIdxToLookaheads[ruleIdx] = @[i.ahead]
+    if (ruleIdx, i.pos) notin rulePosToLookaheads:
+      rulePosToLookaheads[(ruleIdx,i.pos)] = [i.ahead].toHashSet
     else:
-      ruleIdxToLookaheads[ruleIdx].add i.ahead 
+      rulePosToLookaheads[(ruleIdx,i.pos)].incl i.ahead 
   for i in itms:
     let ruleIdx = findRuleIdx(g, i.rule)
-    if ruleIdx notin ruleIdxToLookaheads:
+    if (ruleIdx,i.pos) notin rulePosToLookaheads:
       continue 
     ns.add $ruleIdx
     ns.add " "
     populateRuleStringWithDot(ns, i.rule.left.nonTerm, i.rule.right, i.pos)
     ns.add " ["
-    for j,ahead in ruleIdxToLookaheads[ruleIdx]:
+    var j = 0
+    for ahead in rulePosToLookaheads[(ruleIdx,i.pos)]:
       ns.add $ahead
-      if j < ruleIdxToLookaheads[ruleIdx].len-1:
+      if j < rulePosToLookaheads[(ruleIdx,i.pos)].len-1:
         ns.add ","
+      inc j 
     ns.add "]"
     ns.add "\\l"
+    rulePosToLookaheads.del((ruleIdx,i.pos)) 
+
     let nxt = next(i)
     if nxt in populatedTransitions:
       continue 
@@ -190,7 +196,6 @@ proc populateDotGraph*[T](gr: var Graph, itms: LALRItems[T], g: Grammar[T], at: 
       else:
         discard gr.edge($state, $at[state][nxt].state, some $nxt, [("style", "solid")]) # e.g. 1 --Token-->2
         
-    ruleIdxToLookaheads.del(ruleIdx) 
   discard gr.node($state, some ns) # add the state node
       
 proc `$`*[T](r: Symbol[T]) : string = 

@@ -6,6 +6,7 @@ import patty
 import lextypes
 import lexer
 import parsetypes
+import debuginfo
 
 proc `$`*[T](i: ActionTableItem[T]): string =
   match i:
@@ -102,18 +103,7 @@ proc parseImpl*[T, S](parser: var Parser[S],
         discard parser.pop
         discard tree.pop
       tree.add(NonTerminal[T, S](r, reseted))
-      try:
-        parser.push(parser.table.goto[parser.top][r.left])
-      except KeyError:
-        when defined(nimydebug):
-          echo "Parser:"
-          echo parser
-          echo "left:"
-          echo r.left
-        let msg = "Nimy Internal Error (goto key error)"
-        raise newException(NimyGotoError, msg)
-      except:
-        raise
+      parser.push(parser.table.goto[parser.top][r.left])
     of ActionTableItemKind.Accept:
       when defined(nimydebug):
         if tree.len == 1:
