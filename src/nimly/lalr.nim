@@ -70,10 +70,10 @@ proc firstItem[T](os: OrderedSet[T]): T =
     return i
 
 proc getItemIfSingle[T](s: HashSet[T]): T =
+  doAssert s.card == 1, "Expected singleton set but got " & $s
   if s.card == 1:
     for i in s:
       return i
-  raise newException(NimyError, "Unexpected: " & $s & " needs to be single.")
 
 ## Same as Dragonbook Argorithm 4.62 & 4.63
 proc toLALRKernel[T](lrKernel: SetOfLRItems[T], g: Grammar[T],
@@ -185,6 +185,11 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
           else:
             if actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Shift:
+
+              # just prioritize shifting error symbol. 
+              if itm.ahead.kind == SymbolKind.ErrorS:
+                continue 
+
               actionTable[idx][itm.ahead] = resolveShiftReduceConflict(itm.rule, 
               itm.ahead.term, g, actionTable[idx][itm.ahead].state)
               when defined(nimydebug):

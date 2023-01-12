@@ -98,10 +98,10 @@ type
     Normal
     Provisional # after recovery, stays in this until shifts 3 tokens ok
   Parser*[T] = object
-    stack: seq[State]
-    table: ParsingTable[T]
-    provisionalToksCnt: int 
-    errState: ParserErrorState
+    stack*: seq[State]
+    table*: ParsingTable[T]
+    provisionalToksCnt*: int 
+    errState*: ParserErrorState
 
 variantp ParseTree[T, S]:
   Terminal(token: T)
@@ -180,11 +180,10 @@ proc lenWithoutEmpty*[T](r: Rule[T]): int =
       inc(result)
 
 proc `[]`[T](os: OrderedSet[T], idx: int): T {.inline.} =
-  if os.len <= idx:
-    raise newException(IndexDefect, "idx is too large.")
   for i, key in os:
     if i == idx:
       return key
+  raise newException(Exception, "Index " & $idx & " not found")
 
 proc newRule*[T](prec: Option[Precedence], left: Symbol[T], right: varargs[Symbol[T]]): Rule[T] =
   assert left.kind == SymbolKind.NonTermS,
@@ -387,7 +386,7 @@ proc calFirsts*[T](g: Grammar[T],
       Empty:
         raise newException(
           NimyError,
-          "Unexpected Empty Rule: Ambiguous rules for parse empty sequent cannot be used in nimy. Check your grammer has no ambiguous rules in which what non-terminal represents the empty sequent."
+          "Unexpected Empty Rule: Ambiguous rules for parse. Epsilon cannot be used on the right hand side of rules."
         )
 
 proc getPrecedence*[T](g: Grammar[T], tok: string): Option[Precedence] = 
