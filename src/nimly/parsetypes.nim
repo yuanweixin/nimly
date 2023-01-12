@@ -105,6 +105,7 @@ type
 
 variantp ParseTree[T, S]:
   Terminal(token: T)
+  ErrorNode ## generated corresponding to error token. 
   NonTerminal(rule: Rule[S], tree: seq[ParseTree[T, S]])
 
 
