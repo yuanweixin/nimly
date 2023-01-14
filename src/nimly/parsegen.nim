@@ -894,10 +894,13 @@ macro nimy*(head, body: untyped): untyped =
     )
 
   # add proc parse
+  let procName = ident("parse_" & parserName.strVal)
   result.add quote do:
-    proc parse*[T,S](parser: var Parser[S]; lexer: var NimlLexer[T]): `returnType` = 
+    proc `procName`*[T,S](parser: var Parser[S]; lexer: var NimlLexer[T]): Option[`returnType`] = 
       let tree = parseImpl(parser, lexer)
-      return `topProcId`(tree)
+      if parser.hasError:
+        return none[`returnType`]()
+      return some `topProcId`(tree)
   
   when defined(nimydebug):
     echo toStrLit(result)

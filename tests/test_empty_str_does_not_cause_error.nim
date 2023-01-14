@@ -2,6 +2,7 @@ import unittest
 import patty
 
 import nimly
+import std/options
 
 variant Token:
   CHARS(val: string)
@@ -25,10 +26,10 @@ test "parser works":
   var testLexer = testLex.newWithString("This is a test")
   testLexer.ignoreIf = proc(r: Token): bool = r.kind == TokenKind.IGNORE
   var parser = testPar.newParser()
-  check parser.parse(testLexer) == @["This", "is", "a", "test"]
+  check parser.parse_testPar(testLexer) == some @["This", "is", "a", "test"]
 
 test "empty string does not cause error":
   var testLexer = testLex.newWithString("")
   testLexer.ignoreIf = proc(r: Token): bool = r.kind == TokenKind.IGNORE
   var parser = testPar.newParser()
-  check parser.parse(testLexer).len == 0
+  check parser.parse_testPar(testLexer).get.len == 0

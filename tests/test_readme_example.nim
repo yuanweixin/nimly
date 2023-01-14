@@ -1,7 +1,7 @@
 import unittest
 import patty
 import strutils
-
+import std/options
 import nimly
 
 ## variant is defined in patty
@@ -85,28 +85,28 @@ test "test Parser 1":
   testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
 
   var parser = testPar.newParser()
-  check parser.parse(testLexer) == "1 + [42 * 101010]"
+  check parser.parse_testPar(testLexer) == some "1 + [42 * 101010]"
 
   testLexer.initWithString("1 + 42 * 1010")
 
   parser.init()
-  check parser.parse(testLexer) == "1 + [42 * 1010]"
+  check parser.parse_testPar(testLexer) == some "1 + [42 * 1010]"
 
 test "test Parser 2":
   var testLexer = testLex.newWithString("1 + 42 * 1.01010")
   testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
 
   var parser = testPar.newParser()
-  check parser.parse(testLexer) == "1 + [42 * 1.01010]"
+  check parser.parse_testPar(testLexer) == some "1 + [42 * 1.01010]"
 
   testLexer.initWithString("1. + 4.2 * 101010")
 
   parser.init()
-  check parser.parse(testLexer) == "1. + [4.2 * 101010]"
+  check parser.parse_testPar(testLexer) == some "1. + [4.2 * 101010]"
 
 test "test Parser 3":
   var testLexer = testLex.newWithString("(1 + 42) * 1.01010")
   testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
 
   var parser = testPar.newParser()
-  check parser.parse(testLexer) == "[(1 + 42) * 1.01010]"
+  check parser.parse_testPar(testLexer) == some "[(1 + 42) * 1.01010]"

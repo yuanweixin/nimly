@@ -93,15 +93,11 @@ type
   ParsingTable*[T] = object
     action*: ActionTable[T]
     goto*: GotoTable[T]
-  ParserErrorState* = enum
-    Err
-    Normal
-    Provisional # after recovery, stays in this until shifts 3 tokens ok
   Parser*[T] = object
     stack*: seq[State]
     table*: ParsingTable[T]
     provisionalToksCnt*: int 
-    errState*: ParserErrorState
+    hasError*: bool
 
 variantp ParseTree[T, S]:
   Terminal(token: T)

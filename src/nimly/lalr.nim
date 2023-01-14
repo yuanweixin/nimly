@@ -219,7 +219,7 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
     echo "LALR automaton"
     for idx, itms in lalrKnl:
       echo "state " & $idx 
-      let clj = ag.closure(itms)
+      var clj = ag.closure(itms)
       echo lalrItemsToString(clj, g, actionTable, gotoTable, idx)
       echo "=============================="
     echo actionTable 
@@ -230,7 +230,7 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
     # repeat closure calculation in nimydebug...
     # oh well. 
     for idx, itms in lalrKnl:
-      let clj = ag.closure(itms)
+      var clj = ag.closure(itms)
       populateDotGraph(dg, clj, g, actionTable, gotoTable, idx)
     echo dg.render    
 

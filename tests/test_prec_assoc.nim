@@ -4,6 +4,7 @@ import strutils
 import macros
 import std/math
 import nimly
+import std/options
 
 ## variant is defined in patty
 variant MyToken:
@@ -38,7 +39,7 @@ niml testLex[MyToken]:
   r"\s":
     return IGNORE()
 
-nimy testPar[MyToken]:
+nimy testPar[MyToken, SLR]:
   %left PLUS MINUS
   %left MULTI DIV
   %nonassoc EXPON
@@ -60,22 +61,21 @@ nimy testPar[MyToken]:
     MINUS exp %prec UMINUS:
       return -($2)
 
-proc calculate(str: string) : int = 
+proc calculate(str: string) : Option[int] = 
   var
     lexer = testLex.newWithString($str)
   lexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
   var
      parser = testPar.newParser()
-  return parser.parse(lexer)
+  return parser.parse_testPar(lexer)
 
 test "nonassoc":
-  expect(Exception):
-    echo $calculate("2^2^3")
+  check calculate("2^2^3") == none[int]()
 
 test "top level prec rules":
-    check calculate("20 + 1 * 2") == 22
-    check calculate("20+1*2+30") == 52
-    check calculate("1+2+3+4") == 10 
-    check calculate("1*2*3*4") == 24
-    check calculate("1*2+3*4") == 14
-    check calculate("-100 * -100") == 10000
+    check calculate("20 + 1 * 2") == some 22
+    check calculate("20+1*2+30") == some 52
+    check calculate("1+2+3+4") == some 10 
+    check calculate("1*2*3*4") == some 24
+    check calculate("1*2+3*4") == some 14
+    check calculate("-100 * -100") == some 10000

@@ -7,6 +7,7 @@ import lextypes
 import lexer
 import parsetypes
 import debuginfo
+import std/options
 
 # TODO turn parseImpl return type into option type and the generated code should return option type as well. 
 # TODO would be nice to give user a way to handle parser error, but would need to research on how that even works.
@@ -65,22 +66,20 @@ proc nextChar[T,S](lexer: var NimlLexer[T], token: var T, symbol: var Symbol[S])
   except NimlEOFError:
     symbol = End[S]()
   except:
-    raise
-  
+    raise # TODO eliminate exceptions from lexer. replace with error type. 
 
 proc parseImpl*[T, S](parser: var Parser[S],
                       lexer: var NimlLexer[T]): ParseTree[T, S] =
-  var tree: seq[ParseTree[T, S]] = @[]
-  var token: T
-  var symbol: Symbol[S]
-  if lexer.isEmpty:
-    symbol = End[S]()
-  else:
-    token  = lexer.lexNext # TODO lexNext should yield End on EOF then raise exception if called again. 
-    symbol = TermS[S](token.kind)
+  var 
+    tree: seq[ParseTree[T, S]] = @[]
+    token: T
+    symbol: Symbol[S]
+    prevErrorLookahead : Option[Symbol[S]]
+  
+  lexer.nextChar(token, symbol)
   while true:
     when defined(nimytrace):
-      echo "parser stack:" & $parser.stack
+      echo "\nparser stack:" & $parser.stack
       echo "read token:" & $symbol
     var action: ActionTableItem[S]
     
@@ -115,35 +114,66 @@ proc parseImpl*[T, S](parser: var Parser[S],
       doAssert tree.len == 1, "Error, parsing result is wrong."
       return NonTerminal[T, S](rule = Rule[S](), tree =tree)
     of ActionTableItemKind.Error:
+      if prevErrorLookahead.isSome and parser.stack.len <= 1:
+        # infinite loop detection: for the case when there is 
+        # no possible action for the lookahead token we would 
+        # be stuck. discarding tokens might help, so we will 
+        # do that. this guarantees progress. this works because
+        # any shift/reduce action puts something on the stack,
+        # and accept would have returned. 
+        when defined(nimytrace):
+          echo "infinite loop detected: no progress possible with an empty stack and lookahead, discarding lookahead to try again. lookahead=" & $prevErrorLookahead.get 
+        # sanity check
+        doAssert prevErrorLookahead.get == symbol
+        lexer.nextChar(token, symbol)
+
+      parser.hasError = true 
       # are we out of luck (tokens)? 
       if symbol == End[S]():
-        raise newException(Exception, "Unexpected EOF during parse")
+        # we will just return ErrorNode as the parse tree. 
+        return ErrorNode[T,S]()
       let errSym = ErrorS[S]()
 
+      prevErrorLookahead = some symbol  
       # pop the stack until we reach state in which the 
       # action for the error token is shift
       # while parser.stack.len > 1 and errSym notin parser.table.action[parser.top]:
       while parser.stack.len > 1 and (errSym notin parser.table.action[parser.top] or parser.table.action[parser.top][errSym].kind != ActionTableItemKind.Shift):
-        discard parser.stack.pop()
+        when defined(nimytrace):
+          if errSym notin parser.table.action[parser.top]:
+            echo "no action for error symbol. discarding stack.top=" & $parser.top()
+          else:
+            echo "action for error symbol is not Shift but is " & $parser.table.action[parser.top][errSym] & ". discarding stack.top=" & $parser.top()
+        discard parser.pop()
+        discard tree.pop()
 
       # we could have error token show up in the initial state
       # so we check if we can shift the error token first. 
-      if parser.table.action[parser.top][errSym].kind == ActionTableItemKind.Shift:
-        # shift the error symbol
-        tree.add(ErrorNode[T,S]())
-        parser.push(parser.table.action[parser.top][errSym].state)
-        while symbol != End[S]() and 
-          (symbol notin parser.table.action[parser.top] or 
-            parser.table.action[parser.top][symbol].kind == ActionTableItemKind.Error):
-            lexer.nextChar(token, symbol)
-        if symbol == End[S]():
-          raise newException(Exception, "Unexpected EOF during parse")
-        continue 
-      else: # discarded all context. 
-        continue 
+      if errSym in parser.table.action[parser.top]:
+        if parser.table.action[parser.top][errSym].kind == ActionTableItemKind.Shift:
+          # shift the error symbol
+          when defined(nimytrace):
+            echo "adding ErrorNode to parse tree"
+          tree.add(ErrorNode[T,S]())
+          parser.push(parser.table.action[parser.top][errSym].state)
+          # skip lookaheads until a state is reached that 
+          # has a non-error action on the lookahead
+          while symbol != End[S]() and 
+            (symbol notin parser.table.action[parser.top] or 
+              parser.table.action[parser.top][symbol].kind == ActionTableItemKind.Error):
+              when defined(nimytrace):
+                echo "discarding lookahead=" & $token
+              lexer.nextChar(token, symbol)
+          if symbol == End[S]():
+            return ErrorNode[T,S]()
+      # it is just a syntax error if "error" is not in the rule. do not try 
+      # to complicate things further say by discarding lookaheads and see if 
+      # we can eventually parse something. more sane to bail at this point. 
+      return ErrorNode[T,S]()
+        
 
 proc newParser*[T](t: ParsingTable[T]): Parser[T] =
-  result = Parser[T](stack: @[0], table: t, provisionalToksCnt: 0, errState: Normal)
+  result = Parser[T](stack: @[0], table: t, provisionalToksCnt: 0, hasError:false)
   result.init()
 
 proc init*[T](p: var Parser[T]) =

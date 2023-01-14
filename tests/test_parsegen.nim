@@ -1,7 +1,7 @@
 import unittest
 import patty
 import strutils
-
+import std/options
 import nimly
 
 type
@@ -68,7 +68,7 @@ test "test 2":
   var testLexer = testLex.newWithString("1 + 2 * 3")
   testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
   var parser = testPar.newParser()
-  check parser.parse(testLexer) == "1 + (2 * 3)"
+  check parser.parse_testPar(testLexer) == some "1 + (2 * 3)"
   testLexer.initWithString("1 + 2 * 3")
   parser.init()
-  check parser.parse(testLexer) == "1 + (2 * 3)"
+  check parser.parse_testPar(testLexer) == some "1 + (2 * 3)"

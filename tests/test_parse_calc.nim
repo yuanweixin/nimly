@@ -3,6 +3,7 @@ import patty
 import strutils
 
 import nimly
+import std/options
 
 variant MyToken:
   PLUS
@@ -38,7 +39,7 @@ nimy testPar[MyToken]:
     NUM:
       return ($1).val
 
-test "test 1":
+test "lexer":
   var testLexer = testLex.newWithString("1 + 2 * 3")
   testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
   var
@@ -48,8 +49,8 @@ test "test 1":
   check ret == @[MyTokenKind.NUM, MyTokenKind.PLUS, MyTokenKind.NUM,
                  MyTokenKind.MULTI, MyTokenKind.NUM]
 
-test "test 2":
+test "parsing":
   var testLexer = testLex.newWithString("1 + 2 * 3")
   testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
   var parser = testPar.newParser()
-  check parser.parse(testLexer) == "7"
+  check parser.parse_testPar(testLexer) == some "7"

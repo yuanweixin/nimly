@@ -10,7 +10,7 @@ let
               NonTermS[string]("C"),NonTermS[string]("C")),
       newRule(none[Precedence](), NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
       newRule(none[Precedence](), NonTermS[string]("C"), TermS("d")),
-    ].toHashSet,
+    ].toOrderedSet,
     NonTermS[string]("S")
   ).augment
 
@@ -22,7 +22,7 @@ let
       newRule(none[Precedence](), NonTermS[string]("L"), TermS("*"), NonTermS[string]("R")),
       newRule(none[Precedence](), NonTermS[string]("L"), TermS("id")),
       newRule(none[Precedence](), NonTermS[string]("R"), NonTermS[string]("L")),
-    ].toHashSet,
+    ].toOrderedSet,
     NonTermS[string]("S")
   ).augment
 
@@ -60,7 +60,7 @@ test "test closure for lalr":
       )
     ].toHashSet
 
-  check c == expected
+  check expected == c
 
 proc contains[T](itms: LALRItems[T], itm: LRItem[T]): bool =
   result = false

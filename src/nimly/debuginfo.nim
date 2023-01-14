@@ -6,11 +6,23 @@ import std/sets
 
 type RuleIdx = int 
 
+const errorState : State = -1 
+const acceptState : State = -2
+const reduceNodeColor = "1"
+const acceptNodeColor = "3"
+const errorNodeColor = "5"
+
 proc `$`*[T](s: SetOfLRItems[T]): string =
   result = "CanonicalCollection:\n--------\n"
   for i, itms in s:
     result = result & $i & ":" & $itms & "\n"
   result = result & "--------\n"
+
+func findRuleIdx[T](g: Grammar[T], r: Rule[T]) : State = 
+  for i,ru in g.rules:
+    if r==ru:
+      return i 
+  return -1 
 
 func populateRuleStringWithDot[T](result: var string, lhs: string, rhs: seq[Symbol[T]], position:int) = 
   result.add lhs
@@ -23,6 +35,8 @@ func populateRuleStringWithDot[T](result: var string, lhs: string, rhs: seq[Symb
   if position == rhs.len:
     result.add ". "
 
+proc `$`*[T](i: LRItem[T]) : string = 
+  populateRuleStringWithDot(result, i.rule.left.nonTerm, i.rule.right, i.pos)
 
 proc `$`*[T](i: LALRItem[T]) : string = 
   populateRuleStringWithDot(result, i.rule.left.nonTerm, i.rule.right, i.pos)
@@ -30,130 +44,19 @@ proc `$`*[T](i: LALRItem[T]) : string =
   result.add $i.ahead
   result.add "]"
 
-proc `$`*[T](i: LRItem[T]) : string = 
+proc `$`*[T](i: LALRItem[T], lookaheads: HashSet[Symbol[T]]=initHashSet[T]()): string = 
   populateRuleStringWithDot(result, i.rule.left.nonTerm, i.rule.right, i.pos)
+  result.add " ["
+  var i = 0 
+  for la in lookaheads:
+      result.add $la
+      if i < lookaheads.len-1:
+        result.add ", "
+      inc i 
+  result.add "]"
 
-func findRuleIdx[T](g: Grammar[T], r: Rule[T]) : State = 
-  for i,ru in g.rules:
-    if r==ru:
-      return i 
-  return -1 
-
-proc lrItemToString[T](r: LRItem[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) : string = 
-    let nxt = next(r)
-    result.add "\t"
-    if nxt == End[T]():
-        result.add "reduce using " 
-        result.add $r.rule
-    elif state in gt and nxt in gt[state]:
-        result.add $nxt 
-        result.add ", go to state "
-        result.add $gt[state][nxt]
-    else:
-        result.add $nxt 
-        if nxt.kind == SymbolKind.ErrorS:
-          result.add ", go to state "
-        else:
-          result.add ", shift and go to state "
-        result.add $at[state][nxt].state
-
-proc lalrItemToString[T](r: LALRItem[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) : string = 
-    let nxt = next(r)
-    result.add "\t"
-    if nxt == End[T]():
-        result.add $r.ahead
-        result.add "\t" 
-        result.add "reduce using " 
-        result.add $r.rule
-    elif state in gt and nxt in gt[state]:
-        result.add $nxt 
-        result.add ", go to state "
-        result.add $gt[state][nxt]
-    else:
-        result.add $nxt 
-        if nxt.kind == SymbolKind.ErrorS:
-          result.add ", go to state "
-        else:
-          result.add ", shift and go to state "
-        result.add $at[state][nxt].state
-
-proc lalrItemsToString*[T](itms: LALRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) : string = 
-  for r in itms:
-    result.add "\t"
-    result.add $findRuleIdx(g, r.rule)
-    result.add " "
-    result.add $r
-    result.add "\n"
-  result.add "\n"
-  for r in itms:
-    result.add lalrItemToString(r, g, at, gt, state)
-    result.add "\n"
-
-proc lrItemsToString*[T](itms: LRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) : string = 
-    for r in itms:
-        result.add "\t"
-        result.add $findRuleIdx(g, r.rule)
-        result.add " "
-        result.add $r
-        result.add "\n"
-    result.add "\n"
-    for r in itms:
-        result.add lrItemToString(r, g, at, gt, state)
-        result.add "\n"
-
-iterator actionTableItems*[T](at: ActionTable[T], state: State) : (Symbol[T], ActionTableItem[T]) = 
-  if state in at:
-    for sym, item in at[state]:
-      yield (sym, item)
-      
-func quote(s: string) : string = 
-  result = "\"" & s & "\""
-
-proc emptyDotGraph*() : Graph = 
-  var dg = newGraph(isDirected=true)
-  dg.nodeAttrs.add ("fontname", "courier")
-  dg.nodeAttrs.add ("shape", "box")
-  dg.nodeAttrs.add ("colorscheme", "paired6")
-  dg.edgeAttrs.add ("fontname", "courier")
-  return dg 
-
-proc populateDotGraph*[T](gr: var Graph, itms: LRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
-  var ns = "State " & $state & "\\n\\l "
-  # prevent duplicate edges
-  var populatedTransitions : HashSet[Symbol[T]]
-  for i in itms:
-    let ruleIdx = findRuleIdx(g, i.rule)
-    ns.add $ruleIdx
-    ns.add " "
-    populateRuleStringWithDot(ns, i.rule.left.nonTerm, i.rule.right, i.pos)
-    ns.add "\\l"
-    # remember for which symbols we already drew edge
-    let nxt = next(i)
-    if nxt in populatedTransitions:
-      continue 
-    populatedTransitions.incl nxt
-    if nxt == End[T]():
-        # e.g. 1R5
-        let reduceStateName = $state & "R" & $ruleIdx
-        # need to quote 1R5 otherwise doesn't work correctly
-        discard gr.node(quote reduceStateName, label=some("R" & $ruleIdx), [("fillcolor", "3"), ("shape", "diamond"), ("style", "filled")]) # e.g. 1R5 
-          .edge($state, quote reduceStateName, none[string](), [("style", "solid")]) # e.g. 1 -> "1R5"
-    elif state in gt and nxt in gt[state]:
-        discard gr.edge($state, $gt[state][nxt], some $nxt, [("style", "dashed")]) # e.g. 1 --left--> 2
-    else:
-      if nxt.kind == SymbolKind.ErrorS:
-        discard gr.edge($state, $at[state][nxt].state, none[string](), [("style", "dotted")]) # no label on error 
-      else:
-        discard gr.edge($state, $at[state][nxt].state, some $nxt, [("style", "solid")]) # e.g. 1 --Token-->2
-  discard gr.node($state, some ns) # add the state node
-
-
-proc populateDotGraph*[T](gr: var Graph, itms: LALRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
-  var ns = "State " & $state & "\\n\\l "
-  # collapse multiple (rule,pos) with diff lookahead into 1 entry 
+func lalrItemGroupTokensToString[T](result: var string, g: Grammar[T], itms: LALRItems[T], separator:string="\n") = 
   var rulePosToLookaheads : Table[(RuleIdx,int), HashSet[Symbol[T]]]
-  # prevent duplicate edges
-  var populatedTransitions : HashSet[Symbol[T]]
   for i in itms:
     let ruleIdx = findRuleIdx(g, i.rule)
     if (ruleIdx, i.pos) notin rulePosToLookaheads:
@@ -164,39 +67,128 @@ proc populateDotGraph*[T](gr: var Graph, itms: LALRItems[T], g: Grammar[T], at: 
     let ruleIdx = findRuleIdx(g, i.rule)
     if (ruleIdx,i.pos) notin rulePosToLookaheads:
       continue 
+    result.add $ruleIdx
+    result.add " "
+    result.add `$`(i, rulePosToLookaheads[(ruleIdx,i.pos)])
+    result.add separator
+    rulePosToLookaheads.del((ruleIdx,i.pos)) 
+
+func populateActionString*[T](result: var string, at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
+  if state in gt:
+    for sym, gotoState in gt[state]:
+      result.add $sym
+      result.add ", go to state "
+      result.add $gotoState
+      result.add "\n"
+  if state in at:
+    for sym, act in at[state]:
+      case act.kind
+      of ActionTableItemKind.Shift:
+        result.add $sym
+        if sym.kind == SymbolKind.ErrorS: 
+          # sym is the `error` token that can be specified in the grammar
+          # here, it means, should we shift the error token, we will go 
+          # to that state. 
+          result.add ", shift error and go to state "
+        else:
+          result.add ", shift and go to state "
+        result.add $act.state
+      of ActionTableItemKind.Reduce:
+        # unlike for dot graph, we do not need to dedup the reduce here, 
+        # because we also print out which symbol was used as the lookahead
+        # for the reduce, so there is in fact no duplicated entries, albeit 
+        # we do print one line for each (rule,position,lookahead) combination.
+        result.add $sym
+        result.add ", reduce using "
+        result.add $act.rule
+      of ActionTableItemKind.Error:
+        # here we have an explicit table entry for Error. normally, the absence 
+        # of action causes the parser engine to treat it as Error. however, for 
+        # non-associative tokens, during shift-reduce conflict resolution, we 
+        # would generate an Error entry. 
+        result.add $sym
+        result.add ", result in parse error"
+      of ActionTableItemKind.Accept:
+        result.add $sym
+        result.add ", accept"
+      result.add "\n"
+
+proc lalrItemsToString*[T](itms: LALRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) : string = 
+  lalrItemGroupTokensToString(result, g, itms)
+  result.add "\nactions:\n"
+  populateActionString(result, at, gt, state)
+
+proc lrItemsToString*[T](itms: LRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) : string = 
+  for i in itms:
+    let ruleIdx = g.findRuleIdx(i.rule)
+    result.add $ruleIdx
+    result.add " "
+    populateRuleStringWithDot(result, i.rule.left.nonTerm, i.rule.right, i.pos)
+    result.add "\n"
+  result.add "\nactions:\n"
+  populateActionString(result, at, gt, state)
+
+func quote(s: string) : string = 
+  result = "\"" & s & "\""
+
+proc emptyDotGraph*() : Graph = 
+  result = newGraph(isDirected=true)
+  result.nodeAttrs.add ("fontname", "courier")
+  result.nodeAttrs.add ("shape", "box")
+  result.nodeAttrs.add ("colorscheme", "paired6")
+  result.edgeAttrs.add ("fontname", "courier")
+  discard result.node($acceptState, label=some "accept", [("fillcolor", acceptNodeColor), ("shape","square"), ("style", "filled")])
+    .node($errorState, label=some "parse error", [("fillcolor", errorNodeColor), ("shape", "diamond"), ("style", "filled")])
+
+func populateGraphNodeAction[T](gr: var Graph, g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
+  var reduceDedup: HashSet[State]
+  if state in gt:
+    for sym, gotoState in gt[state]:
+      discard gr.edge($state, $gotoState, some $sym, [("style", "dashed")]) # e.g. 1 --left--> 2
+  if state in at:
+    for sym, act in at[state]:
+      case act.kind
+      of ActionTableItemKind.Shift:
+          # sym is the `error` token that can be specified in the grammar
+          # here, it means, should we shift the error token, we will go 
+          # to that state. 
+          if sym.kind == SymbolKind.ErrorS:
+            discard gr.edge($state, $act.state, none[string](), [("style", "dotted")]) # no label on error 
+          else:
+            discard gr.edge($state, $act.state, some $sym, [("style", "solid")])
+      of ActionTableItemKind.Reduce:
+        let ruleIdx = g.findRuleIdx(act.rule)
+        if ruleIdx notin reduceDedup:
+            # e.g. 1R5
+          let reduceStateName = $state & "R" & $ruleIdx
+          # need to quote 1R5 
+          discard gr.node(quote reduceStateName, label=some("R" & $ruleIdx), [("fillcolor", reduceNodeColor), ("shape", "diamond"), ("style", "filled")]) 
+            .edge($state, quote reduceStateName, none[string](), [("style", "solid")]) 
+          reduceDedup.incl ruleIdx
+      of ActionTableItemKind.Error:
+        # edge to the error node because, well, at run time this depends on the 
+        # left parse context, so we wouldn't really know after we pop off some left
+        # context what state we end up being able to Shift to with the error 
+        discard gr.edge($state, $errorState, some $sym, [("style", "dotted")])
+      of ActionTableItemKind.Accept:
+        discard gr.edge($state, $acceptState, some $sym, [("style", "solid")])
+  
+proc populateDotGraph*[T](gr: var Graph, itms: LRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
+  var ns = "State " & $state & "\\n\\l "
+  for i in itms:
+    let ruleIdx = g.findRuleIdx(i.rule)
     ns.add $ruleIdx
     ns.add " "
     populateRuleStringWithDot(ns, i.rule.left.nonTerm, i.rule.right, i.pos)
-    ns.add " ["
-    var j = 0
-    for ahead in rulePosToLookaheads[(ruleIdx,i.pos)]:
-      ns.add $ahead
-      if j < rulePosToLookaheads[(ruleIdx,i.pos)].len-1:
-        ns.add ","
-      inc j 
-    ns.add "]"
-    ns.add "\\l"
-    rulePosToLookaheads.del((ruleIdx,i.pos)) 
-
-    let nxt = next(i)
-    if nxt in populatedTransitions:
-      continue 
-    populatedTransitions.incl nxt
-    if nxt == End[T]():
-        # e.g. 1R5
-        let reduceStateName = $state & "R" & $ruleIdx
-        # need to quote 1R5 otherwise doesn't work correctly
-        discard gr.node(quote reduceStateName, label=some("R" & $ruleIdx), [("fillcolor", "3"), ("shape", "diamond"), ("style", "filled")]) # e.g. 1R5 
-          .edge($state, quote reduceStateName, none[string](), [("style", "solid")]) # e.g. 1 -> "1R5"
-    elif state in gt and nxt in gt[state]:
-        discard gr.edge($state, $gt[state][nxt], some $nxt, [("style", "dashed")]) # e.g. 1 --left--> 2
-    else:
-      if nxt.kind == SymbolKind.ErrorS:
-        discard gr.edge($state, $at[state][nxt].state, none[string](), [("style", "dotted")]) # no label on error 
-      else:
-        discard gr.edge($state, $at[state][nxt].state, some $nxt, [("style", "solid")]) # e.g. 1 --Token-->2
-        
+    ns.add "\\n\\l "
   discard gr.node($state, some ns) # add the state node
+  populateGraphNodeAction(gr, g, at, gt, state)
+
+proc populateDotGraph*[T](gr: var Graph, itms: LALRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
+  var ns = "State " & $state & "\\n\\l "
+  lalrItemGroupTokensToString(ns, g, itms, separator="\\n\\l")
+  discard gr.node($state, some ns) # add the state node
+  populateGraphNodeAction(gr, g, at, gt, state)
       
 proc `$`*[T](r: Symbol[T]) : string = 
   case r.kind
@@ -230,7 +222,6 @@ proc `$`*[T](ft: FollowTable[T]): string =
 proc `$`*[T](g: Grammar[T]): string = 
     result = "\n---- Grammar ----\n"
     for i,r in g.rules:
-      result.add "\t"
       result.add $i
       result.add " " 
       result.add $r

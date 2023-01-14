@@ -1,7 +1,5 @@
 import unittest
-
 import nimly
-
 import state_parser
 
 test "test error":
@@ -9,5 +7,5 @@ test "test error":
   lexer.ignoreIf = proc(r: StateToken): bool = r.kind == StateTokenKind.SIGNORE
 
   var parser = testStatePar.newParser()
-  expect NimyActionError:
-    discard parser.parse(lexer)
+  discard parser.parse_testStatePar(lexer)
+  doAssert parser.hasError
