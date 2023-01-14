@@ -19,26 +19,26 @@ variant MyToken:
   IGNORE
   EXPON
 
-niml testLex[MyToken]:
+genStringMatcher testLex[int,MyToken]:
   r"\(":
-    return LPAREN()
+    yield LPAREN()
   r"\)":
-    return RPAREN()
+    yield RPAREN()
   r"\+":
-    return PLUS()
+    yield PLUS()
   r"-":
-    return MINUS()
+    yield MINUS()
   r"\*":
-    return MULTI()
+    yield MULTI()
   r"/":
-    return DIV()
+    yield DIV()
   r"\d+":
-    return NUM(parseInt(token.token))
-  r"^":
-    return EXPON()
+    yield NUM(parseInt(input.substr(oldpos, pos-1)))
+  r"\^":
+    yield EXPON()
   r"\s":
-    return IGNORE()
-
+    discard
+  
 nimy testPar[MyToken, SLR]:
   %left PLUS MINUS
   %left MULTI DIV
@@ -63,10 +63,8 @@ nimy testPar[MyToken, SLR]:
 
 proc calculate(str: string) : Option[int] = 
   var
-    lexer = testLex.newWithString($str)
-  lexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
-  var
-     parser = testPar.newParser()
+    lexer = testLex.newWithString(42, str)
+    parser = testPar.newParser()
   return parser.parse_testPar(lexer)
 
 test "nonassoc":

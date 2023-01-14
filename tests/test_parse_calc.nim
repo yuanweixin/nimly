@@ -11,15 +11,15 @@ variant MyToken:
   NUM(val: int)
   IGNORE
 
-niml testLex[MyToken]:
+genStringMatcher testLex[int,MyToken]:
   r"\+":
-    return PLUS()
+    yield PLUS()
   r"\*":
-    return MULTI()
+    yield MULTI()
   r"\d*":
-    return NUM(parseInt(token.token))
+    yield NUM(parseInt(input.substr(oldpos, pos-1)))
   r"\s":
-    return IGNORE()
+    discard
 
 nimy testPar[MyToken]:
   top[string]:
@@ -40,8 +40,7 @@ nimy testPar[MyToken]:
       return ($1).val
 
 test "lexer":
-  var testLexer = testLex.newWithString("1 + 2 * 3")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, "1 + 2 * 3")
   var
     ret: seq[MyTokenKind] = @[]
   for token in testLexer.lexIter:
@@ -50,7 +49,6 @@ test "lexer":
                  MyTokenKind.MULTI, MyTokenKind.NUM]
 
 test "parsing":
-  var testLexer = testLex.newWithString("1 + 2 * 3")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, "1 + 2 * 3")
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "7"

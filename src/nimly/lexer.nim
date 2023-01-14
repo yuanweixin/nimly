@@ -1,121 +1,46 @@
-import lexbase
-import streams
-
-import lextypes
-import lexgen
+type
+  # EOF but didn't accept last few chunks of input
+  # Not EOF but didn't accept last few chunks of input 
+  # Old lexer does throw for those conditions. 
+  # Lexim currently throws a generic Exception when encountering jam state. 
+  # TODO revise it to something else
+  # tldr: this isn't used by lexim but keeping here as reminder to fix exception behavior in lexer
+  LexError* = object of Exception
 
 type
-  NimlLexer*[T] = object of BaseLexer
-    data*: LexData[T]
-    ignoreIf*: proc(r: T): bool
-    setUp*: proc() {.nimcall.}
-    tearDown*: proc() {.nimcall.}
+  TokIter[LS,T] = iterator(lexState: var LS): T {.closure.} 
+  NimlLexer*[LS,T] = object  # LS: lexer state type, T: token type
+    tokStream*: TokIter[LS,T]
+    lastRead: T
+    lexState: LS
+
+  # used as a base type for eof error, TODO eliminate me. 
   NimlError* = object of Exception
+  # used in parser, so for now will keep throwing it
+  # TODO eliminate after successful lexim integration. 
   NimlEOFError* = object of NimlError
 
-proc newNimlLexer[T](data: LexData[T]): NimlLexer[T] =
-  result = NimlLexer[T](
-    data: data,
-    ignoreIf: proc(r: T): bool = false,
-    setUp: data.setUp,
-    tearDown: data.tearDown,
-  )
+# TODO this is used in many test case 
+proc newWithString*[LS,T](makeLex: proc (s: string) : TokIter[LS,T], lexState: LS, str: string): NimlLexer[LS,T] =
+  result.lexState = lexState
+  result.tokStream = makeLex(str)
+  result.lastRead = result.tokStream(result.lexState)
 
-proc open*[T](data: LexData[T], path: string): NimlLexer[T] =
-  result = newNimlLexer(data)
-  result.open(openFileStream(path))
-  result.setUp()
+# TODO used in a few tests but totally unnecessary in lexim
+proc close*[LS,T](lexer: var NimlLexer[LS,T]) =
+  discard
 
-proc newWithString*[T](data: LexData[T], str: string): NimlLexer[T] =
-  result = newNimlLexer(data)
-  result.open(newStringStream(str))
-  result.setUp()
+proc isEmpty*[LS,T](nl: NimlLexer[LS,T]): bool =
+  return finished(nl.tokStream)
 
-proc open*[T](lexer: var NimlLexer[T], path: string) =
-  lexer.open(openFileStream(path))
-  lexer.setUp()
-
-proc initWithString*[T](lexer: var NimlLexer[T], str: string) =
-  lexer.open(newStringStream(str))
-  lexer.setUp()
-
-proc close*[T](lexer: var NimlLexer[T]) =
-  lexer.data.tearDown()
-  lexbase.close(lexer)
-
-proc lex*[T](nl: var NimlLexer[T]): T =
-  let
-    colNum = nl.getColNumber(nl.bufpos)
-    lineNum = nl.lineNumber
-    lineInfo = nl.getCurrentLine
-  var
-    token: string = ""
-    lastAccToken: string = ""
-    state: State = 0
-    lastAccState: State = deadState
-    pos = nl.bufpos
-    lastAccPos: int = -1
-    lastAccLine: int = -1
-    ltoken = LToken(colNum: colNum, lineNum: lineNum, lineInfo: lineInfo)
-  when defined(nimldebug):
-    echo "--lex start--"
-    echo state
-  while state != deadState:
-    let c = nl.buf[pos]
-    token &= c
-    case c
-    of '\L':
-      pos = nl.handleLF(pos)
-      when defined(nimldebug):
-        echo "handleLF"
-    of '\c':
-      pos = nl.handleCR(pos)
-      when defined(nimldebug):
-        echo "handleCR"
-    else:
-      inc(pos)
-      when defined(nimldebug):
-        echo "handleOther"
-
-    state = nl.data.nextState(state, c)
-    when defined(nimldebug):
-      echo "read:" & c
-      echo "state:" & $state
-    if nl.data.isAcc(state):
-      lastAccToken = token
-      lastAccState = state
-      lastAccPos = pos
-      lastAccLine = nl.lineNumber
-    if c == EndOfFile and lastAccState == -1:
-      raise newException(LexError, "invalid EOF while lexing")
-
-  if lastAccState == -1:
-    raise newException(LexError, "LexError:\n" & lineInfo)
-
-  ltoken.token = lastAccToken
-
-  result = nl.data.dba[lastAccState].accept.fun(ltoken)
-
-  nl.bufpos = lastAccPos
-  nl.lineNumber = lastAccLine
-  when defined(nimldebug):
-    echo "--lex end--"
-    echo "token:" & lastAccToken
-    try:
-      echo "result:" & $result
-    except:
-      discard
-
-proc isEmpty*[T](nl: NimlLexer[T]): bool =
-  nl.buf[nl.bufpos] == EndOfFile
-
-proc lexNext*[T](nl: var NimlLexer[T]): T =
-  while nl.buf[nl.bufpos] != EndOfFile:
-    result = nl.lex
-    if not nl.ignoreIf(result):
-      return
+proc lexNext*[LS,T](nl: var NimlLexer[LS,T]): T =
+  if not finished(nl.tokStream):
+    let retVal = nl.lastRead
+    nl.lastRead = nl.tokStream(nl.lexState)
+    return retVal 
   raise newException(NimlEOFError, "read EOF")
 
-iterator lexIter*[T](nl: var NimlLexer[T]): T =
-  while nl.buf[nl.bufpos] != EndOfFile:
-    yield nl.lexNext
+iterator lexIter*[LS,T](nl: var NimlLexer[LS,T]): T =
+  while not finished(nl.tokStream):
+    yield nl.lastRead 
+    nl.lastRead = nl.tokStream(nl.lexState)

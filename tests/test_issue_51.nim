@@ -6,42 +6,36 @@ import nimly
 variant MyToken:
   tSYM(str: string)
 
-niml lexer1[MyToken]:
-  "[^ \t\r\n]+": tSYM(token.token)
+genStringMatcher lexer1[int, MyToken]:
+  r"([^ \t\r\C\L]|\C\L)+":  # ugly hack to get around lexim's inability to put \n into a class!
+    yield tSYM(input.substr(oldpos, pos-1))
 
-niml lexer2[MyToken]:
+genStringMatcher lexer2[int, MyToken]:
   r"\S+":
-    return tSYM(token.token)
+    yield tSYM(input.substr(oldpos, pos-1))
 
 test "test [^...] in regex":
-  var testLexer = lexer1.newWithString("loloi<<1")
-  testLexer.ignoreIf = proc(r: MyToken): bool = false
+  var testLexer = lexer1.newWithString(42, "loloi<<1")
   var ret: seq[MyToken] = @[]
   for s in testLexer.lexIter:
     ret.add(s)
   check ret == @[tSYM("loloi<<1")]
-  testLexer.close
 
 test "test [^...] in regex (exception)":
-  var testLexer = lexer1.newWithString("loloi << 1")
-  testLexer.ignoreIf = proc(r: MyToken): bool = false
-  check testLexer.lexNext == tSYM("loloi")
-  expect LexError:
+  var testLexer = lexer1.newWithString(42, "loloi << 1")
+  expect Exception:
     discard testLexer.lexNext
 
 test r"test \S in regex (exception)":
-  var testLexer = lexer2.newWithString("loloi<<1")
-  testLexer.ignoreIf = proc(r: MyToken): bool = false
+  var testLexer = lexer2.newWithString(42, "loloi<<1")
   var ret: seq[MyToken] = @[]
   for s in testLexer.lexIter:
     ret.add(s)
   check ret == @[tSYM("loloi<<1")]
-  testLexer.close
 
 test r"test \S in regex (exception)":
-  var testLexer = lexer2.newWithString("loloi << 1")
-  testLexer.ignoreIf = proc(r: MyToken): bool = false
-  check testLexer.lexNext == tSYM("loloi")
-  expect LexError:
+  # this is no match. should not yield any token. 
+  var testLexer = lexer2.newWithString(42, "loloi << 1")
+  expect Exception:
     discard testLexer.lexNext
 

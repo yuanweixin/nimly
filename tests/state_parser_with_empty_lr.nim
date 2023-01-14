@@ -16,31 +16,31 @@ variantp StateToken:
   STHEN
   SIGNORE
 
-niml testStateLex[StateToken]:
+genStringMatcher testStateLex[int,StateToken]:
   r"\+":
-    return SPLUS()
+    yield SPLUS()
   r"\*":
-    return SMULTI()
+    yield SMULTI()
   r"\d+":
-    return SNUM(parseInt(token.token))
+    yield SNUM(parseInt(input.substr(oldpos, pos-1)))
   r"if":
-    return SIF()
+    yield SIF()
   r"else":
-    return SELSE()
+    yield SELSE()
   r"then":
-    return STHEN()
+    yield STHEN()
   r"\(":
-    return SLPAREN()
+    yield SLPAREN()
   r"\)":
-    return SRPAREN()
+    yield SRPAREN()
   r"\{":
-    return SLBRACE()
-  r"}":
-    return SRBRACE()
-  r"[a..zA..Z_]\w*":
-    return SID(token.token)
+    yield SLBRACE()
+  r"\}":
+    yield SRBRACE()
+  r"[a-zA-Z_]\w*":
+    yield SID(input.substr(oldpos, pos-1))
   r"\s":
-    return SIGNORE()
+    discard
 
 nimy testStatePar[StateToken,SLR]:
   top[string]:

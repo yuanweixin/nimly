@@ -1,52 +1,55 @@
 import unittest
-import streams
+import patty
 
-import nimly/lextypes
-import nimly/lexgen
-import nimly/lexer
+import nimly
+import std/options
 
-proc finalState[T](ld: LexData[T], str: string): int =
-  result = 0
-  for c in str:
-    result = ld.nextState(result, c)
-    if result == deadState:
-      return
-
-proc doesAccept[T](ld: LexData[T], str: string): bool =
-  let fs = finalState[T](ld, str)
-  if fs == deadState:
-    return false
-  return ld.dba[fs].accept.kind == AcceptKind.Acc
-
-proc accProc[T](ld: LexData[T], str: string): AccProc[T] =
-  let fs = finalState[T](ld, str)
-  assert ld.dba[fs].accept.kind == AcceptKind.Acc
-  return ld.dba[fs].accept.fun
-
-niml testLex[string]:
+genStringMatcher testLex[int,string]:
   r"if":
-    return token.token
+    yield input.substr(oldpos, pos-1)
   r"else":
-    return "acc"
+    yield "acc"
   r"\s":
-    return ""
+    discard 
 
-test "test macro niml (if/else)":
-  var testLexer = testLex.newWithString("""if
+test "sanity":
+  var iter = testLex("""if
 else if
 else""")
-  testLexer.ignoreIf = proc(r: string): bool = false
+  var state = 42
+  var actual : seq[string]
+  for x in iter(state):
+    actual.add x
+  check @["if", "acc", "if", "acc"] == actual
+
+test "test macro niml (if/else)":
+  var testLexer = testLex.newWithString(42, """if
+else if
+else""")
   var ret: seq[string] = @[]
   for s in testLexer.lexIter():
     ret.add(s)
-  check ret == @["if", "", "acc", "", "if", "", "acc"]
+  check ret == @["if", "acc", "if", "acc"]
 
-  testLexer = testLex.newWithString("""if
+test "is empty":
+  var testLexer = testLex.newWithString(42, "")
+  check testLexer.isEmpty()
+
+test "calling lexNext on empty throws NimlEOFError":
+  var testLexer = testLex.newWithString(42, "")
+  check testLexer.isEmpty()
+  expect(NimlEOFError):
+    discard testLexer.lexNext()
+
+test "lexNext":
+  var testLexer = testLex.newWithString(42, """if
 else if
 else""")
-  testLexer.ignoreIf = proc(r: string): bool = r == ""
-  ret = @[]
-  for s in testLexer.lexIter:
-    ret.add(s)
+  var ret: seq[string] = @[]
+  while not testLexer.isEmpty():
+    ret.add testLexer.lexNext()
+
   check ret == @["if", "acc", "if", "acc"]
-  testLexer.close
+  check testLexer.isEmpty
+  expect(NimlEOFError):
+    discard testLexer.lexNext()

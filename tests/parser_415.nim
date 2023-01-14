@@ -7,15 +7,15 @@ variantp MyTerm:
   ID(val: string)
   IGNORE
 
-niml lex415[MyTerm]:
+genStringMatcher lex415[int,MyTerm]:
   r"=":
-    return EQ()
+    yield EQ()
   r"\*":
-    return ST()
-  r"[a..zA..Z\-_][a..zA..Z0..9\-_]*":
-    return ID(token.token)
+    yield ST()
+  r"[a-zA-Z\-_][a-zA-Z0-9\-_]*":
+    yield ID(input.substr(oldpos, pos-1))
   r"\s":
-    return IGNORE()
+    discard
 
 nimy psr415LALR[MyTerm]:
   start[string]:

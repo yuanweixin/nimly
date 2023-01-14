@@ -26,15 +26,15 @@ proc NUM(num: int): MyToken =
 proc IGNORE(): MyToken =
   return MyToken(kind: MyTokenKind.IGNORE)
 
-niml testLex[MyToken]:
+genStringMatcher testLex[int, MyToken]:
   r"\+":
-    return PLUS()
+    yield PLUS()
   r"\*":
-    return MULTI()
+    yield MULTI()
   r"\d*":
-    return NUM(parseInt(token.token))
+    yield NUM(parseInt(input.substr(oldpos, pos-1)))
   r"\s":
-    return IGNORE()
+    discard
 
 nimy testPar[MyToken]:
   top[string]:
@@ -55,8 +55,7 @@ nimy testPar[MyToken]:
       return $(($1).val)
 
 test "test 1":
-  var testLexer = testLex.newWithString("1 + 2 * 3")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, "1 + 2 * 3")
   var
     ret: seq[MyTokenKind] = @[]
   for token in testLexer.lexIter:
@@ -65,10 +64,9 @@ test "test 1":
                  MyTokenKind.MULTI, MyTokenKind.NUM]
 
 test "test 2":
-  var testLexer = testLex.newWithString("1 + 2 * 3")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, "1 + 2 * 3")
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "1 + (2 * 3)"
-  testLexer.initWithString("1 + 2 * 3")
+  testLexer = testLex.newWithString(42, "1 + 2 * 3")
   parser.init()
   check parser.parse_testPar(testLexer) == some "1 + (2 * 3)"

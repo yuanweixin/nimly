@@ -14,21 +14,21 @@ variant MyToken:
   RPAREN
   IGNORE
 
-niml testLex[MyToken]:
+genStringMatcher testLex[int,MyToken]:
   r"\(":
-    return LPAREN()
+    yield LPAREN()
   r"\)":
-    return RPAREN()
+    yield RPAREN()
   r"\+":
-    return PLUS()
+    yield PLUS()
   r"\*":
-    return MULTI()
+    yield MULTI()
   r"\d":
-    return NUM(parseInt(token.token))
+    yield NUM(parseInt(input.substr(oldpos, pos-1)))
   r"\.":
-    return DOT()
+    yield DOT()
   r"\s":
-    return IGNORE()
+    discard
 
 nimy testPar[MyToken]:
   top[string]:
@@ -66,9 +66,7 @@ nimy testPar[MyToken]:
         result &= $(tkn.val)
 
 test "test Lexer":
-  var testLexer = testLex.newWithString("1 + 42 * 101010")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
-
+  var testLexer = testLex.newWithString(42, "1 + 42 * 101010")
   var
     ret: seq[MyTokenKind] = @[]
 
@@ -81,32 +79,29 @@ test "test Lexer":
                  MyTokenKind.NUM, MyTokenKind.NUM, MyTokenKind.NUM]
 
 test "test Parser 1":
-  var testLexer = testLex.newWithString("1 + 42 * 101010")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, "1 + 42 * 101010")
 
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "1 + [42 * 101010]"
 
-  testLexer.initWithString("1 + 42 * 1010")
+  testLexer = testLex.newWithString(42, "1 + 42 * 1010")
 
   parser.init()
   check parser.parse_testPar(testLexer) == some "1 + [42 * 1010]"
 
 test "test Parser 2":
-  var testLexer = testLex.newWithString("1 + 42 * 1.01010")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, "1 + 42 * 1.01010")
 
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "1 + [42 * 1.01010]"
 
-  testLexer.initWithString("1. + 4.2 * 101010")
+  testLexer = testLex.newWithString(42, "1. + 4.2 * 101010")
 
   parser.init()
   check parser.parse_testPar(testLexer) == some "1. + [4.2 * 101010]"
 
 test "test Parser 3":
-  var testLexer = testLex.newWithString("(1 + 42) * 1.01010")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, "(1 + 42) * 1.01010")
 
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "[(1 + 42) * 1.01010]"

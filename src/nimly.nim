@@ -7,6 +7,7 @@ import nimly/slr
 import nimly/lalr
 import nimly/parsegen
 import nimly/debuginfo
+import lexim
 
 export lextypes.LexError
 export lextypes.LToken
@@ -15,6 +16,8 @@ export lextypes.LexData
 export lexgen
 
 export lexer
+
+export lexim
 
 export debuginfo.`$`
 

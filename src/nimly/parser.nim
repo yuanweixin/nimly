@@ -59,7 +59,7 @@ proc pop[T](parser: var Parser[T]): parsetypes.State =
 proc top[T](parser: Parser[T]): parsetypes.State =
   return parser.stack[parser.stack.high]
 
-proc nextChar[T,S](lexer: var NimlLexer[T], token: var T, symbol: var Symbol[S]) =
+proc nextChar[LS,T,S](lexer: var NimlLexer[LS,T], token: var T, symbol: var Symbol[S]) =
   try:
     token = lexer.lexNext
     symbol = TermS[S](token.kind)
@@ -68,8 +68,8 @@ proc nextChar[T,S](lexer: var NimlLexer[T], token: var T, symbol: var Symbol[S])
   except:
     raise # TODO eliminate exceptions from lexer. replace with error type. 
 
-proc parseImpl*[T, S](parser: var Parser[S],
-                      lexer: var NimlLexer[T]): ParseTree[T, S] =
+proc parseImpl*[LS,T, S](parser: var Parser[S],
+                      lexer: var NimlLexer[LS,T]): ParseTree[T, S] =
   var 
     tree: seq[ParseTree[T, S]] = @[]
     token: T
@@ -106,7 +106,7 @@ proc parseImpl*[T, S](parser: var Parser[S],
       tree.add(NonTerminal[T, S](r, reseted))
       parser.push(parser.table.goto[parser.top][r.left])
     of ActionTableItemKind.Accept:
-      when defined(nimydebug):
+      when defined(nimytrace):
         if tree.len == 1:
           echo tree[0]
         else:

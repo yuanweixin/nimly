@@ -14,19 +14,19 @@ variant MyToken:
   SEMI
   IGNORE
   
-niml testLex[MyToken]:
+genStringMatcher testLex[int, MyToken]:
   r"\(":
-    return LPAREN()
+    yield LPAREN()
   r"\)":
-    return RPAREN()
+    yield RPAREN()
   r"\+":
-    return PLUS()
+    yield PLUS()
   r"ID":
-    return ID()
+    yield ID()
   r";":
-    return SEMI()
+    yield SEMI()
   r"\s":
-    return IGNORE()
+    discard
 
 nimy testPar[MyToken]:
   exps[int]:
@@ -73,13 +73,11 @@ nimy infiniteLoop[MyToken]:
 
 test "appel book example":
   # from modern compiler implementation in ML p.76
-  var testLexer = testLex.newWithString(")ID")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, ")ID")
   var parser = testPar.newParser()
   discard parser.parse_testPar(testLexer) 
 
 test "infinite loop does not occur":
-  var testLexer = testLex.newWithString(")ID")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+  var testLexer = testLex.newWithString(42, ")ID")
   var parser = infiniteLoop.newParser()
   discard parser.parse_infiniteLoop(testLexer) 
