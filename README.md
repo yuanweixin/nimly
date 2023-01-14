@@ -2,7 +2,7 @@
 title: nimyacc
 ---
 
-<!-- [![github\_workflow](https://github.com/yuanweixin/nimyacc/workflows/test/badge.svg)](https://github.com/loloicci/nimly/actions?query=workflow%3Atest) -->
+[![github\_workflow](https://github.com/yuanweixin/nimyacc/workflows/test/badge.svg)](https://github.com/yuanweixin/nimyacc/actions?query=workflow%3Atest)
 [![nimble](https://raw.githubusercontent.com/yglukhov/nimble-tag/master/nimble.png)](https://github.com/yglukhov/nimble-tag)
 
 # nimyacc: LALR, SLR generator macro library in Nim. 
