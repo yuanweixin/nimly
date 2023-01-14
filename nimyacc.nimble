@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.0.1"
+version       = "0.9.0"
 author        = "Wei Xin Yuan"
 description   = "Parser generator macro library"
 license       = "MIT"
@@ -16,5 +16,5 @@ requires "https://github.com/yuanweixin/dotted"
 
 import ospaths
 task gendoc, "generate docs":
-  exec "nim doc --project --outdir: htmldocs src/nimly.nim"
+  exec "nim doc --project --outdir: htmldocs src/nimyacc.nim"
 

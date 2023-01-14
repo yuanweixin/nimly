@@ -1,10 +1,10 @@
-import nimly/lexer
-import nimly/parsetypes
-import nimly/parser
-import nimly/slr
-import nimly/lalr
-import nimly/parsegen
-import nimly/debuginfo
+import nimyacc/lexer
+import nimyacc/parsetypes
+import nimyacc/parser
+import nimyacc/slr
+import nimyacc/lalr
+import nimyacc/parsegen
+import nimyacc/debuginfo
 import lexim
 import tables
 import sets

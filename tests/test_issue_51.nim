@@ -1,7 +1,7 @@
 import unittest
 
 import patty
-import nimly
+import nimyacc
 
 variant MyToken:
   tSYM(str: string)

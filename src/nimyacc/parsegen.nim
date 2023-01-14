@@ -8,7 +8,7 @@ import parser
 import fusion/matching
 
 type
-  PTProc[T, S, R] = proc(nimlytree: ParseTree[T, S]): R {.nimcall.}
+  PTProc[T, S, R] = proc(nimyacctree: ParseTree[T, S]): R {.nimcall.}
   RuleToProc*[T, S, R] = Table[Rule[S], PTProc[T, S, R]]
   NimyKind = enum
     NonTerm
@@ -259,7 +259,7 @@ proc replaceBody(body, param: NimNode,
 proc makeRuleProc(name, body, rTy, tokenType, tokenKind: NimNode,
                   types: seq[string], nimyInfo: NimyInfo, pt=false): NimNode =
   let
-    param = newIdentNode("nimlytree")
+    param = newIdentNode("nimyacctree")
     pTy =   nnkBracketExpr.newTree(newIdentNode("ParseTree"),
                                    tokenType, tokenKind)
     params = @[rTy, nnkIdentDefs.newTree(param, pTy, newEmptyNode())]

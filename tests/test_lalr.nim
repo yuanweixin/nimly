@@ -1,7 +1,7 @@
 import unittest
 import std/options
-include nimly/slr
-include nimly/lalr
+include nimyacc/slr
+include nimyacc/lalr
 
 let
   g = initGrammar[string](

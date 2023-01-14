@@ -1,9 +1,9 @@
 import unittest
-import nimly/parsetypes
+import nimyacc/parsetypes
 import std/options
 import std/sets
 import std/tables
-import nimly/debuginfo
+import nimyacc/debuginfo
 
 func NT(s: string) : Symbol[string] = 
     return NonTermS[string](s)

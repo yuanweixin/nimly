@@ -2,7 +2,7 @@ import unittest
 import patty
 import strutils
 import std/options
-import nimly
+import nimyacc
 
 type
   MyTokenKind{.pure.} = enum

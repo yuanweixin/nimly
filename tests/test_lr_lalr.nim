@@ -1,6 +1,6 @@
 import unittest
 import std/options
-import nimly
+import nimyacc
 import parser_415
 import parser_415_lr
 

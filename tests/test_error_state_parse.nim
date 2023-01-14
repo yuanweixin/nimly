@@ -1,5 +1,5 @@
 import unittest
-import nimly
+import nimyacc
 import state_parser
 
 test "test error":

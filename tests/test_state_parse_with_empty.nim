@@ -1,5 +1,5 @@
 import unittest
-import nimly
+import nimyacc
 import state_parser_with_empty
 import std/options
 

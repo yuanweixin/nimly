@@ -1,5 +1,5 @@
 import patty
-import nimly
+import nimyacc
 import strutils
 
 variantp StateToken:

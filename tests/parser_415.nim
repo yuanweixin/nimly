@@ -1,5 +1,5 @@
 import patty
-import nimly
+import nimyacc
 
 variantp MyTerm:
   EQ

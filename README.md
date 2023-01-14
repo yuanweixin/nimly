@@ -1,13 +1,13 @@
 ---
-title: nimly
+title: nimyacc
 ---
 
-[![github\_workflow](https://github.com/loloicci/nimly/workflows/test/badge.svg)](https://github.com/loloicci/nimly/actions?query=workflow%3Atest)
+<!-- [![github\_workflow](https://github.com/yuanweixin/nimyacc/workflows/test/badge.svg)](https://github.com/loloicci/nimly/actions?query=workflow%3Atest) -->
 [![nimble](https://raw.githubusercontent.com/yglukhov/nimble-tag/master/nimble.png)](https://github.com/yglukhov/nimble-tag)
 
-# LALR, SLR generator macro library in Nim. 
+# nimyacc: LALR, SLR generator macro library in Nim. 
 
-This library started life as a fork of [nimly](https://github.com/loloicci/nimly), which provided the core implementation of the SLR and LALR algorithms, as well as the macro dsl. Various code improvements and extensions of functionality were made. 
+nimyacc started life as a fork of [nimly](https://github.com/loloicci/nimly), which provided the core implementation of the SLR and LALR algorithms, as well as the macro dsl. Various code improvements and extensions of functionality were made. 
 
 ## Here's a list of the added functionalities: 
 * Support for bison style %left, %right, %nonassoc declarations, as well as rule level %prec declarations to use in conflict resolution. 
@@ -138,5 +138,5 @@ Example of these is in next section.
 Install
 =======
 
-`nimble install https://github.com/yuanweixin/nimly`
+`nimble install https://github.com/yuanweixin/nimyacc`
 

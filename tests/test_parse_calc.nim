@@ -2,7 +2,7 @@ import unittest
 import patty
 import strutils
 
-import nimly
+import nimyacc
 import std/options
 
 variant MyToken:

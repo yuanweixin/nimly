@@ -1,7 +1,7 @@
 import unittest
 import strutils
 import patty
-import nimly
+import nimyacc
 import std/options
 
 variant Token:

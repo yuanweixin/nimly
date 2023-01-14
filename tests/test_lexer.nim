@@ -1,7 +1,7 @@
 import unittest
 import patty
 
-import nimly
+import nimyacc
 import std/options
 
 genStringMatcher testLex[int,string]:

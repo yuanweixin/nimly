@@ -3,7 +3,7 @@ import patty
 import strutils
 import macros
 import std/math
-import nimly
+import nimyacc
 
 ## variant is defined in patty
 variant MyToken:

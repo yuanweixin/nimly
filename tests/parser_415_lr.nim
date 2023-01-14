@@ -1,5 +1,5 @@
 import patty
-import nimly
+import nimyacc
 import parser_415
 
 nimy psr415LR[MyTerm, SLR]:
