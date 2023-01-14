@@ -3,7 +3,6 @@ import strutils
 
 import patty
 
-import lextypes
 import lexer
 import parsetypes
 import debuginfo

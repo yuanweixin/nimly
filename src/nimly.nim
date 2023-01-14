@@ -1,5 +1,3 @@
-import nimly/lextypes
-import nimly/lexgen
 import nimly/lexer
 import nimly/parsetypes
 import nimly/parser
@@ -8,12 +6,10 @@ import nimly/lalr
 import nimly/parsegen
 import nimly/debuginfo
 import lexim
-
-export lextypes.LexError
-export lextypes.LToken
-export lextypes.LexData
-
-export lexgen
+import tables
+import sets
+export tables
+export sets
 
 export lexer
 
