@@ -8,12 +8,12 @@
 
 nimyacc started life as a fork of [nimly](https://github.com/loloicci/nimly), which provided the core implementation of the SLR and LALR algorithms, as well as the macro dsl. Various code improvements and extensions of functionality were made. 
 
-## Here's a list of the added functionalities: 
+## Here's a list of features:
 * Support for bison style %left, %right, %nonassoc declarations, as well as rule level %prec declarations to use in conflict resolution. 
 * Output text description of the grammar, conflict count, parser automaton, when -d:nimydebug is defined. 
-* Output dot file of the parser automaton, when -d:nimygraphviz is passed. 
+* Output dot string of the parser automaton, when -d:nimygraphviz is passed. 
 * Ad hoc error recovery using error token, as described in Modern Compiler Implementation in ML, p.76. I believe this is similar to what yacc/bison does. Fwiw it is basically the algorithm described in [PLY documentation](https://www.dabeaz.com/ply/ply.html#ply_nn29). 
-* Replace the original lexer code by [lexim](https://github.com/yuanweixin/lexim) which is a high performance scanner library. The original lexer code ran slower, was implemented in a way that ran too long at compile time, and had a bug where it crashes if a token does not fit the buffer. Lexim encodes the dfa in a goto loop which is faster, calls out to an executable to process the dfa instead of using the compiler vm, and uses strings instead of buffer, so it doesn't suffer from these problems. 
+* Replace the original nimy lexer code by [lexim](https://github.com/yuanweixin/lexim) which is a high performance scanner library. The original lexer code ran slower, was implemented in a way that ran too long at compile time, and had a bug where it crashes if a token does not fit the buffer. Lexim encodes the dfa in a goto loop which is faster, calls out to an executable to process the dfa instead of using the compiler vm, and uses strings instead of buffer, so it doesn't suffer from these problems. 
 
 # Possible future extensions
 
@@ -36,8 +36,11 @@ nimyacc started life as a fork of [nimly](https://github.com/loloicci/nimly), wh
 Usage
 ====
 
-macro nimy
-----------
+## macro genStringMatcher
+
+This macro specifies the lexer. See the [lexim doc](https://github.com/yuanweixin/lexim) for more info. 
+
+## macro nimy
 
 macro `nimy` makes a parser. The SLR/LALR table construction is done at compile time. The generated code simply creates a proc that, when called, invokes the parser engine on the given input, and use the parser table to derive the parse tree. The parse tree is then traversed post-order. During the traversal, the user-specified code blocks are run. 
 
@@ -97,6 +100,8 @@ nimy testPar[MyToken]:
       return "(" & $2 & ")"
 
     ## float (integer part is 0-9) or integer
+    # DOT[] means 0 or 1 DOT. 
+    # NUM{} means 0 or more NUM. 
     NUM DOT[] NUM{}:
       result = ""
       # type of `($1).val` is `int`
