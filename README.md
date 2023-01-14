@@ -1,11 +1,10 @@
----
-title: nimyacc
----
+# nimyacc
+
+## LALR, SLR generator macro library in Nim. 
 
 [![github\_workflow](https://github.com/yuanweixin/nimyacc/workflows/test/badge.svg)](https://github.com/yuanweixin/nimyacc/actions?query=workflow%3Atest)
 [![nimble](https://raw.githubusercontent.com/yglukhov/nimble-tag/master/nimble.png)](https://github.com/yglukhov/nimble-tag)
 
-# nimyacc: LALR, SLR generator macro library in Nim. 
 
 nimyacc started life as a fork of [nimly](https://github.com/loloicci/nimly), which provided the core implementation of the SLR and LALR algorithms, as well as the macro dsl. Various code improvements and extensions of functionality were made. 
 
