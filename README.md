@@ -14,8 +14,6 @@ This library started life as a fork of [nimly](https://github.com/loloicci/nimly
 * Output text description of the grammar, conflict count, parser automaton, when -d:nimydebug is defined. 
 * Output dot file of the parser automaton, when -d:nimygraphviz is passed. 
 * Ad hoc error recovery using error token, as described in Modern Compiler Implementation in ML, p.76. I believe this is similar to what yacc/bison does. Fwiw it is basically the algorithm described in [PLY documentation](https://www.dabeaz.com/ply/ply.html#ply_nn29). 
-
-  ### WIP
 * Replace the original lexer code by [lexim](https://github.com/yuanweixin/lexim) which is a high performance scanner library. The original lexer code ran slower, was implemented in a way that ran too long at compile time, and had a bug where it crashes if a token does not fit the buffer. Lexim encodes the dfa in a goto loop which is faster, calls out to an executable to process the dfa instead of using the compiler vm, and uses strings instead of buffer, so it doesn't suffer from these problems. 
 
 # Possible future extensions
@@ -39,64 +37,12 @@ This library started life as a fork of [nimly](https://github.com/loloicci/nimly
 Usage
 ====
 
-TODO code examples below are WIP and probably do not reflect current state 
-
 macro nimy
 ----------
 
 macro `nimy` makes a parser. The SLR/LALR table construction is done at compile time. The generated code simply creates a proc that, when called, invokes the parser engine on the given input, and use the parser table to derive the parse tree. The parse tree is then traversed post-order. During the traversal, the user-specified code blocks are run. 
 
 ```nim
-## This makes a LexData object named myParser.
-## first cloud is the top-level of the BNF.
-## This lexer recieve tokens with type ``Token`` and token must have a value
-## ``kind`` with type enum ``[TokenTypeName]Kind``.
-## This is naturally satisfied when you use ``patty`` to define the token.
-nimy myParser[Token]:
-  ## the starting non-terminal
-  ## the return type of the parser is ``Expr``
-  top[Expr]:
-    ## a pattern.
-    expr:
-      ## proc body that is used when parse the pattern with single ``expr``.
-      ## $1 means first position of the pattern (expr)
-      return $1
-
-  ## non-terminal named ``expr``
-  ## with returning type ``Expr``
-  expr[Expr]:
-    ## first pattern of expr.
-    ## ``LPAR`` and ``RPAR`` is TokenKind.
-    LPAR expr RPAR:
-      return $2
-
-    ## second pattern of expr.
-    ## ``PLUS`` is TokenKind.
-    expr PLUS expr
-      return $2
-```
-
-You can use following EBNF functions:
-
--   `XXX[]`: Option (0 or 1 `XXX`). The type is `seq[xxx]` where `xxx`
-    is type of `XXX`.
--   `XXX{}`: Repeat (0 or more `XXX`). The type is `seq[xxx]` where
-    `xxx` is type of `XXX`.
-
-Example of these is in next section.
-
-Example
-=======
-
-`tests/test_readme_example.nim` is an easy example.
-
-``` {.nim}
-import unittest
-import patty
-import strutils
-
-import nimly
-
 ## variant is defined in patty
 variant MyToken:
   PLUS
@@ -107,22 +53,27 @@ variant MyToken:
   RPAREN
   IGNORE
 
-niml testLex[MyToken]:
+# this generates a function testLex(s: string) : iterator(lexState: var int): T {.closure.} 
+# in other words, a function that returns iterator
+genStringMatcher testLex[int,MyToken]:
   r"\(":
-    return LPAREN()
+    yield LPAREN()
   r"\)":
-    return RPAREN()
+    yield RPAREN()
   r"\+":
-    return PLUS()
+    yield PLUS()
   r"\*":
-    return MULTI()
+    yield MULTI()
   r"\d":
-    return NUM(parseInt(token.token))
+    yield NUM(parseInt(input.substr(oldpos, pos-1)))
   r"\.":
-    return DOT()
+    yield DOT()
   r"\s":
-    return IGNORE()
+    discard
 
+# generates "parse_testPar" proc. 
+# the reason it is named in that way is to allow
+# multiple uses of this macro in the same file. 
 nimy testPar[MyToken]:
   top[string]:
     plus:
@@ -158,57 +109,34 @@ nimy testPar[MyToken]:
         # type of `tkn.val` is `int`
         result &= $(tkn.val)
 
-test "test Lexer":
-  var testLexer = testLex.newWithString("1 + 42 * 101010")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+# call the newWithString proc to create a new lexer 
+var testLexer = testLex.newWithString(42, "1 + 42 * 101010")
 
-  var
-    ret: seq[MyTokenKind] = @[]
+var parser = testPar.newParser()
 
-  for token in testLexer.lexIter:
-    ret.add(token.kind)
+# call the generated "parse_testPar" proc. 
+assert parser.parse_testPar(testLexer) == some "1 + [42 * 101010]"
 
-  check ret == @[MyTokenKind.NUM, MyTokenKind.PLUS, MyTokenKind.NUM,
-                 MyTokenKind.NUM, MyTokenKind.MULTI,
-                 MyTokenKind.NUM, MyTokenKind.NUM, MyTokenKind.NUM,
-                 MyTokenKind.NUM, MyTokenKind.NUM, MyTokenKind.NUM]
+testLexer = testLex.newWithString(42, "blahblahblah")
+discard parser.parse_testPar(testLexer) 
 
-test "test Parser 1":
-  var testLexer = testLex.newWithString("1 + 42 * 101010")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
+# call the hasError to see if the parse was successful
+assert parser.hasError 
 
-  var parser = testPar.newParser()
-  check parser.parse(testLexer) == "1 + [42 * 101010]"
-
-  testLexer.initWithString("1 + 42 * 1010")
-
-  parser.init()
-  check parser.parse(testLexer) == "1 + [42 * 1010]"
-
-test "test Parser 2":
-  var testLexer = testLex.newWithString("1 + 42 * 1.01010")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
-
-  var parser = testPar.newParser()
-  check parser.parse(testLexer) == "1 + [42 * 1.01010]"
-
-  testLexer.initWithString("1. + 4.2 * 101010")
-
-  parser.init()
-  check parser.parse(testLexer) == "1. + [4.2 * 101010]"
-
-test "test Parser 3":
-  var testLexer = testLex.newWithString("(1 + 42) * 1.01010")
-  testLexer.ignoreIf = proc(r: MyToken): bool = r.kind == MyTokenKind.IGNORE
-
-  var parser = testPar.newParser()
-  check parser.parse(testLexer) == "[(1 + 42) * 1.01010]"
 ```
+
+You can use following EBNF functions:
+
+-   `XXX[]`: Option (0 or 1 `XXX`). The type is `seq[xxx]` where `xxx`
+    is type of `XXX`.
+-   `XXX{}`: Repeat (0 or more `XXX`). The type is `seq[xxx]` where
+    `xxx` is type of `XXX`.
+
+Example of these is in next section.
+
 
 Install
 =======
 
-1.  `nimble install https://github.com/yuanweixin/nimly`
-
-Now, you can use nimly with `import nimly`.
+`nimble install https://github.com/yuanweixin/nimly`
 

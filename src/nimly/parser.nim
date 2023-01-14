@@ -176,4 +176,7 @@ proc newParser*[T](t: ParsingTable[T]): Parser[T] =
   result.init()
 
 proc init*[T](p: var Parser[T]) =
+  # annoyingly, "reset" is a built-in proc that sets something to its default state,
+  # so we can't name this proc "reset" because if we do the system.reset get called
+  # and bad things happen. will keep calling this "init". 
   p.stack = @[0]
