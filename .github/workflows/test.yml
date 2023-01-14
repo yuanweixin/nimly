@@ -10,12 +10,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Cache nimble
         id: cache-nimble
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.nimble
           key: ${{ runner.os }}-nimble-${{ hashFiles('*.nimble') }}
       - uses: jiro4989/setup-nim-action@v1
+      # update nimble because it's packaged with Nim and for 
+      # whatever reason, Nim still uses an older version nimble
+      # which breaks for lexim due to the use of the new 
+      # taskRequires feature in nimble 0.14. so stupid. 
+      - run: nimble install nimble -y
       - run: nimble test -y
