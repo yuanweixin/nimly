@@ -8,7 +8,6 @@ import parsetypes
 import debuginfo
 import std/options
 
-# TODO turn parseImpl return type into option type and the generated code should return option type as well. 
 # TODO would be nice to give user a way to handle parser error, but would need to research on how that even works.
 
 proc `$`*[T](i: ActionTableItem[T]): string =
