@@ -269,7 +269,6 @@ proc tableMakerProc(tokenType, tokenKind, topNonTerm: NimNode,
   let
     builderId = genSym(nskVar)
   body.add quote do:
-    # TODO set parser type later
     var `builderId` = newGrammarBuilder(`topNonTerm`)
     `builderId`.setParserType(ParserType.`parserType`)
   for rule in rules:
