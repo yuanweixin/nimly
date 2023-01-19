@@ -1,7 +1,7 @@
 import unittest
 import nimyacc
 import state_parser_with_empty
-import std/options
+import options
 
 test "test state":
   var lexer = testStateLex.newWithString(42,"if test + 1 then { true } else { 2 * ( test + 3 ) }")

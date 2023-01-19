@@ -2,9 +2,9 @@ import unittest
 import patty
 import strutils
 import macros
-import std/math
+import math
 import nimyacc
-import std/options
+import options
 
 ## variant is defined in patty
 variant MyToken:

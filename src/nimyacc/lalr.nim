@@ -7,90 +7,83 @@ import patty
 import parsetypes
 import parser
 import slr
-import std/options
-import std/strutils
+import options
+import strutils
 import debuginfo
 import dotted
+import dev_assert
 
-proc initLALRItems[T](): LALRItems[T] =
-  result = initHashSet[LALRItem[T]]()
 
-proc initHashSetOfLALRItems[T](): SetOfLALRItems[T] =
-  result = initOrderedTable[int, LALRItems[T]]()
+proc initLALRItems(): LALRItems =
+  result = initHashSet[LALRItem]()
 
-proc initPropagateTable[T](): PropagateTable[T] =
-  result = initTable[LRItem[T], HashSet[(int, LRItem[T])]]()
+proc initPropagateTable(): PropagateTable =
+  result = initTable[LRItem, HashSet[(int, LRItem)]]()
 
-proc fromNextNext[T](i: LALRItem[T]): seq[Symbol[T]] =
-  result = @[]
-  doAssert i.pos < i.rule.len
-  for index in (i.pos + 1)..<i.rule.len:
-    result.add(i.rule.right[index])
-
-proc closure[T](g: Grammar[T], whole: LALRItems[T]): LALRItems[T] =
+proc closure(g: Grammar, whole: LALRItems): LALRItems =
   result = whole
   var checkSet = whole
+  var new: LALRItems
   while checkSet.len > 0:
-    var new: LALRItems[T]
     for i in checkSet:
       match i.next:
         NonTermS:
           for r in g.filterRulesLeftIs(i.next):
-            doAssert i.ahead.kind != SymbolKind.Empty, "Lookahead is EMPTY (epsilon)"
-            for fst in g.calFirsts(i.fromNextNext & i.ahead):
+            nimyaccAssert i.ahead.kind != SymbolKind.Empty, "Lookahead is EMPTY (epsilon)"
+            for fst in g.calFirsts(i):
               # for each terminal b in FIRST(βa), dragonbook fig. 4.40
               if fst.kind == SymbolKind.Empty:
                 continue 
-              let n = LALRItem[T](rule: r, pos: 0, ahead: fst)
+              let n = LALRItem(ruleIdx: r.index, pos: 0, ahead: fst, g: g)
               if not result.containsOrIncl(n):
                 new.incl(n)
         _:
           discard
     checkSet = new
+    new.clear()
 
-proc closure[T](g: Grammar[T], single: LALRItem[T]): LALRItems[T] =
+proc closure(g: Grammar, single: LALRItem): LALRItems =
   result = g.closure([single].toHashSet)
 
-proc toLALRItem[T](lrItem: LRItem[T], ahead: Symbol[T]): LALRItem[T] =
-  result = LALRItem[T](rule: lrItem.rule, pos: lrItem.pos, ahead: ahead)
+proc toLALRItem(lrItem: LRItem, ahead: Symbol): LALRItem =
+  result = LALRItem(ruleIdx: lrItem.ruleIdx, pos: lrItem.pos, ahead: ahead, g: lrItem.g)
 
 
-proc `[]`[T](pt: PropagateTable[T],
-             itm: LALRItem[T]): HashSet[(int, LRItem[T])] =
-  result = pt[LRItem[T](rule: itm.rule, pos: itm.pos)]
+proc `[]`(pt: PropagateTable,
+             itm: LALRItem): HashSet[(int, LRItem)] =
+  result = pt[LRItem(ruleIdx: itm.ruleIdx, pos: itm.pos, g: itm.g)]
 
 proc incl[T](ot: var OrderedTable[int, T], vl: T) =
   ot[ot.len] = vl
 
-proc forward[T](itm: LALRItem[T]): LALRItem[T] =
-  result = LALRItem[T](rule: itm.rule, pos: itm.pos + 1, ahead: itm.ahead)
+proc forward(itm: LALRItem): LALRItem =
+  result = LALRItem(ruleIdx: itm.ruleIdx, pos: itm.pos + 1, ahead: itm.ahead, g: itm.g)
 
 proc firstItem[T](os: OrderedSet[T]): T =
   for i in os:
     return i
 
 proc getItemIfSingle[T](s: HashSet[T]): T =
-  doAssert s.card == 1, "Expected singleton set but got " & $s
+  nimyaccAssert s.card == 1, "Expected singleton set but got " & $s
   if s.card == 1:
     for i in s:
       return i
 
 ## Same as Dragonbook Argorithm 4.62 & 4.63
-proc toLALRKernel[T](lrKernel: SetOfLRItems[T], g: Grammar[T],
-                     tt: TransTable[T]): SetOfLALRItems[T] =
+proc toLALRKernel(lrKernel: SetOfLRItems, g: Grammar,
+                     tt: TransTable): SetOfLALRItems =
   # init result
-  result = initHashSetOfLALRItems[T]()
-  doAssert lrKernel.card > 0
+  nimyaccAssert lrKernel.card > 0
   for idx in 0..<lrKernel.card:
-    result.incl(initLALRItems[T]())
+    result.incl(initLALRItems())
   var
-    propagation: PropagateTable[T] = initPropagateTable[T]()
-    checkSet: HashSet[LALRItem[T]] = initLALRItems[T]()
+    propagation: PropagateTable = initPropagateTable()
+    checkSet: HashSet[LALRItem] = initLALRItems()
 
   # only starting rule
   let startingRule = lrKernel.firstItem.getItemIfSingle
-  result[0].incl(startingRule.toLALRItem(End[T]()))
-  checkSet.incl(startingRule.toLALRItem(End[T]()))
+  result[0].incl(startingRule.toLALRItem(End()))
+  checkSet.incl(startingRule.toLALRItem(End()))
 
   # init collection and cal propagate
   for idx, itms in lrKernel:
@@ -98,25 +91,23 @@ proc toLALRKernel[T](lrKernel: SetOfLRItems[T], g: Grammar[T],
       echo "converting kernel: " & $(idx + 1) & "/" & $lrKernel.len
     for itm in itms:
       if not (propagation.haskey(itm)):
-        propagation[itm] = initHashSet[(int, LRItem[T])]()
+        propagation[itm] = initHashSet[(int, LRItem)]()
 
       # Dummy is "#" in dragonbook
-      let clsr = g.closure(itm.toLALRItem(Dummy[T]()))
+      let clsr = g.closure(itm.toLALRItem(Dummy()))
       for ci in clsr:
-        if ci.ahead == Dummy[T]():
-          if ci.next != End[T]():
-            propagation[itm] = (propagation[itm] +
-                                [(tt[idx][ci.next],
-                                  ci.forward.toLRItem)].toHashSet)
+        if ci.ahead == Dummy():
+          if ci.next != End():
+            propagation[itm].incl (tt[idx][ci.next], ci.forward.toLRItem)
         else:
           let prpgtd = ci.forward
-          assert tt[idx][ci.next] < lrKernel.card
+          nimyaccAssert tt[idx][ci.next] < lrKernel.card
           result[tt[idx][ci.next]].incl(prpgtd)
           checkSet.incl(prpgtd)
 
   # cal collection
   while checkSet.card > 0:
-    var newSet = initLALRItems[T]()
+    var newSet = initLALRItems()
     for itm in checkSet:
       # propagation[itm] where itm is a LALRItem works because we 
       # snuck in a `[]` proc above, very sneaky and confusing. 
@@ -128,12 +119,12 @@ proc toLALRKernel[T](lrKernel: SetOfLRItems[T], g: Grammar[T],
           newSet.incl(new)
     checkSet = newSet
 
-proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
+proc makeTableLALR*(g: Grammar): ParsingTable =
   var
-    actionTable: ActionTable[T]
-    gotoTable: GotoTable[T]
-  actionTable = initTable[State, ActionRow[T]]()
-  gotoTable = initTable[State, GotoRow[T]]()
+    actionTable: ActionTable
+    gotoTable: GotoTable
+  actionTable = initTable[State, ActionRow]()
+  gotoTable = initTable[State, GotoRow]()
   when defined(nimydebug):
     echo "start: make table for parser"
   let
@@ -141,16 +132,21 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
            g
          else:
            g.augment
-    (cc, tt) = makeCanonicalCollection[T](ag)
+  when defined(nimydebug):
+    echo "start: makeCanonicalCollection"
+  let 
+    (cc, tt) = makeCanonicalCollection(ag)
     knl = cc.filterKernel
-    lalrKnl = knl.toLALRKernel(ag, tt)
+  when defined(nimydebug):
+    echo "start: toLALRKernel"
+  let lalrKnl = knl.toLALRKernel(ag, tt)
   var cntSR = 0 
   var cntRR = 0 
   for idx, itms in lalrKnl:
     when defined(nimydebug):
       echo "processing: Collection " & $(idx + 1) & "/" & $lalrKnl.len
-    actionTable[idx] = initTable[Symbol[T], ActionTableItem[T]]()
-    gotoTable[idx] = initTable[Symbol[T], State]()
+    actionTable[idx] = initTable[Symbol, ActionTableItem]()
+    gotoTable[idx] = initTable[Symbol, State]()
     when defined(nimydebug):
       echo "processing: Collection " & $(idx + 1) & " - make closure"
     let clsr = ag.closure(itms)
@@ -163,7 +159,7 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
       let sym = itm.nextSkipEmpty
       match sym:
         ErrorS:
-          actionTable[idx][sym] = Shift[T](tt[idx][sym])
+          actionTable[idx][sym] = Shift(tt[idx][sym])
         TermS:
           if actionTable[idx].haskey(sym) and
               actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
@@ -176,12 +172,12 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
               actionTable[idx][sym].kind == ActionTableItemKind.Error:
             continue 
           else:
-            actionTable[idx][sym] = Shift[T](tt[idx][sym])
+            actionTable[idx][sym] = Shift(tt[idx][sym])
         NonTermS:
           gotoTable[idx][sym] = tt[idx][sym]
         End:
           if itm.rule.left == ag.start:
-            actionTable[idx][End[T]()] = Accept[T]()
+            actionTable[idx][End()] = Accept()
           else:
             if actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Shift:
@@ -205,7 +201,7 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Error:
               continue
             else:
-              actionTable[idx][itm.ahead] = Reduce[T](itm.rule)
+              actionTable[idx][itm.ahead] = Reduce(itm.rule)
         _:
           discard
 
@@ -234,4 +230,4 @@ proc makeTableLALR*[T](g: Grammar[T]): ParsingTable[T] =
       populateDotGraph(dg, clj, g, actionTable, gotoTable, idx)
     echo dg.render    
 
-  result = ParsingTable[T](action: actionTable, goto: gotoTable)
+  result = ParsingTable(action: actionTable, goto: gotoTable)

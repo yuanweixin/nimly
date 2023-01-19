@@ -1,6 +1,6 @@
 import unittest
 import nimyacc
-import std/options
+import options
 import state_parser_with_empty_lr
 
 test "test state":

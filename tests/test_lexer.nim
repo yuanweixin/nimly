@@ -2,7 +2,7 @@ import unittest
 import patty
 
 import nimyacc
-import std/options
+import options
 
 genStringMatcher testLex[int,string]:
   r"if":

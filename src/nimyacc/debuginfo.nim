@@ -1,8 +1,8 @@
 import parsetypes
 import dotted
-import std/options
-import std/tables
-import std/sets
+import options
+import tables
+import sets
 
 type RuleIdx = int 
 
@@ -12,19 +12,19 @@ const reduceNodeColor = "1"
 const acceptNodeColor = "3"
 const errorNodeColor = "5"
 
-proc `$`*[T](s: SetOfLRItems[T]): string =
+proc `$`*(s: SetOfLRItems): string =
   result = "CanonicalCollection:\n--------\n"
   for i, itms in s:
     result = result & $i & ":" & $itms & "\n"
   result = result & "--------\n"
 
-func findRuleIdx[T](g: Grammar[T], r: Rule[T]) : State = 
+func findRuleIdx(g: Grammar, r: Rule) : State = 
   for i,ru in g.rules:
     if r==ru:
       return i 
   return -1 
 
-func populateRuleStringWithDot[T](result: var string, lhs: string, rhs: seq[Symbol[T]], position:int) = 
+func populateRuleStringWithDot(result: var string, lhs: string, rhs: seq[Symbol], position:int) = 
   result.add lhs
   result.add " -> "
   for pos, r in rhs:
@@ -35,16 +35,16 @@ func populateRuleStringWithDot[T](result: var string, lhs: string, rhs: seq[Symb
   if position == rhs.len:
     result.add ". "
 
-proc `$`*[T](i: LRItem[T]) : string = 
+proc `$`*(i: LRItem) : string = 
   populateRuleStringWithDot(result, i.rule.left.nonTerm, i.rule.right, i.pos)
 
-proc `$`*[T](i: LALRItem[T]) : string = 
+proc `$`*(i: LALRItem) : string = 
   populateRuleStringWithDot(result, i.rule.left.nonTerm, i.rule.right, i.pos)
   result.add " ["
   result.add $i.ahead
   result.add "]"
 
-proc `$`*[T](i: LALRItem[T], lookaheads: HashSet[Symbol[T]]=initHashSet[T]()): string = 
+proc `$`*(i: LALRItem, lookaheads: HashSet[Symbol]=initHashSet[Symbol]()): string = 
   populateRuleStringWithDot(result, i.rule.left.nonTerm, i.rule.right, i.pos)
   result.add " ["
   var i = 0 
@@ -55,8 +55,8 @@ proc `$`*[T](i: LALRItem[T], lookaheads: HashSet[Symbol[T]]=initHashSet[T]()): s
       inc i 
   result.add "]"
 
-func lalrItemGroupTokensToString[T](result: var string, g: Grammar[T], itms: LALRItems[T], separator:string="\n") = 
-  var rulePosToLookaheads : Table[(RuleIdx,int), HashSet[Symbol[T]]]
+func lalrItemGroupTokensToString(result: var string, g: Grammar, itms: LALRItems, separator:string="\n") = 
+  var rulePosToLookaheads : Table[(RuleIdx,int), HashSet[Symbol]]
   for i in itms:
     let ruleIdx = findRuleIdx(g, i.rule)
     if (ruleIdx, i.pos) notin rulePosToLookaheads:
@@ -73,7 +73,7 @@ func lalrItemGroupTokensToString[T](result: var string, g: Grammar[T], itms: LAL
     result.add separator
     rulePosToLookaheads.del((ruleIdx,i.pos)) 
 
-func populateActionString*[T](result: var string, at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
+func populateActionString*(result: var string, at: var ActionTable, gt: var GotoTable, state: State) = 
   if state in gt:
     for sym, gotoState in gt[state]:
       result.add $sym
@@ -113,12 +113,12 @@ func populateActionString*[T](result: var string, at: var ActionTable[T], gt: va
         result.add ", accept"
       result.add "\n"
 
-proc lalrItemsToString*[T](itms: LALRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) : string = 
+proc lalrItemsToString*(itms: LALRItems, g: Grammar, at: var ActionTable, gt: var GotoTable, state: State) : string = 
   lalrItemGroupTokensToString(result, g, itms)
   result.add "\nactions:\n"
   populateActionString(result, at, gt, state)
 
-proc lrItemsToString*[T](itms: LRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) : string = 
+proc lrItemsToString*(itms: LRItems, g: Grammar, at: var ActionTable, gt: var GotoTable, state: State) : string = 
   for i in itms:
     let ruleIdx = g.findRuleIdx(i.rule)
     result.add $ruleIdx
@@ -140,7 +140,7 @@ proc emptyDotGraph*() : Graph =
   discard result.node($acceptState, label=some "accept", [("fillcolor", acceptNodeColor), ("shape","square"), ("style", "filled")])
     .node($errorState, label=some "parse error", [("fillcolor", errorNodeColor), ("shape", "diamond"), ("style", "filled")])
 
-func populateGraphNodeAction[T](gr: var Graph, g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
+func populateGraphNodeAction(gr: var Graph, g: Grammar, at: var ActionTable, gt: var GotoTable, state: State) = 
   var reduceDedup: HashSet[State]
   if state in gt:
     for sym, gotoState in gt[state]:
@@ -173,7 +173,7 @@ func populateGraphNodeAction[T](gr: var Graph, g: Grammar[T], at: var ActionTabl
       of ActionTableItemKind.Accept:
         discard gr.edge($state, $acceptState, some $sym, [("style", "solid")])
   
-proc populateDotGraph*[T](gr: var Graph, itms: LRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
+proc populateDotGraph*(gr: var Graph, itms: LRItems, g: Grammar, at: var ActionTable, gt: var GotoTable, state: State) = 
   var ns = "State " & $state & "\\n\\l "
   for i in itms:
     let ruleIdx = g.findRuleIdx(i.rule)
@@ -184,13 +184,13 @@ proc populateDotGraph*[T](gr: var Graph, itms: LRItems[T], g: Grammar[T], at: va
   discard gr.node($state, some ns) # add the state node
   populateGraphNodeAction(gr, g, at, gt, state)
 
-proc populateDotGraph*[T](gr: var Graph, itms: LALRItems[T], g: Grammar[T], at: var ActionTable[T], gt: var GotoTable[T], state: State) = 
+proc populateDotGraph*(gr: var Graph, itms: LALRItems, g: Grammar, at: var ActionTable, gt: var GotoTable, state: State) = 
   var ns = "State " & $state & "\\n\\l "
   lalrItemGroupTokensToString(ns, g, itms, separator="\\n\\l")
   discard gr.node($state, some ns) # add the state node
   populateGraphNodeAction(gr, g, at, gt, state)
       
-proc `$`*[T](r: Symbol[T]) : string = 
+proc `$`*(r: Symbol) : string = 
   case r.kind
     of SymbolKind.TermS:
       result.add $r.term
@@ -205,7 +205,7 @@ proc `$`*[T](r: Symbol[T]) : string =
     of SymbolKind.ErrorS:
       result.add "error"
 
-proc `$`*[T](rule: Rule[T]) : string = 
+proc `$`*(rule: Rule) : string = 
   result.add rule.left.nonTerm
   result.add " -> "
   for i,r in rule.right:
@@ -213,13 +213,13 @@ proc `$`*[T](rule: Rule[T]) : string =
     if i < rule.right.len-1:
       result.add " " 
 
-proc `$`*[T](ft: FollowTable[T]): string =
+proc `$`*(ft: FollowTable): string =
   result = "\n--------\n"
   for i, itms in ft:
     result = result & $i & ":" & $itms & "\n"
   result = result & "--------\n"
 
-proc `$`*[T](g: Grammar[T]): string = 
+proc `$`*(g: Grammar): string = 
     result = "\n---- Grammar ----\n"
     for i,r in g.rules:
       result.add $i
@@ -227,13 +227,13 @@ proc `$`*[T](g: Grammar[T]): string =
       result.add $r
       result.add "\n"
     
-proc `$`*[T](at: ActionTable[T]): string =
+proc `$`*(at: ActionTable): string =
   result = "\nActionTable:\n--------\n"
   for s, row in at:
     result = result & $s & ":" & $row & "\n"
   result = result & "--------\n"
 
-proc `$`*[T](gt: GotoTable[T]): string =
+proc `$`*(gt: GotoTable): string =
   result = "\nGotoTable:\n--------\n"
   for s, row in gt:
     result = result & $s & ":" & $row & "\n"

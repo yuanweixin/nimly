@@ -3,13 +3,16 @@ import macros
 import tables
 import sets
 
+import marshal
 import parsetypes
 import parser
 import fusion/matching
+import grammar_builder
+import std/jsonutils, json, marshal
 
 type
-  PTProc[T, S, R] = proc(nimyacctree: ParseTree[T, S]): R {.nimcall.}
-  RuleToProc*[T, S, R] = Table[Rule[S], PTProc[T, S, R]]
+  PTProc[T, R] = proc(nimyacctree: ParseTree[T]): R {.nimcall.}
+  RuleToProc*[T, R] = Table[Rule, PTProc[T, R]]
   NimyKind = enum
     NonTerm
     Term
@@ -20,9 +23,7 @@ type
     optRule: NimNode
     repRule: NimNode
   NimyInfo = Table[string, NimyRow]
-  ParserType = enum
-    Slr
-    Lalr 
+  
 
 iterator iter(topClause, body: NimNode, optAndRep: seq[NimNode]): (int, NimNode) =
   var cnt = 0
@@ -56,12 +57,12 @@ proc isTerm(s: string, nimyInfo: NimyInfo): bool =
 proc initNimyInfo(): NimyInfo =
   return initTable[string, NimyRow]()
 
-proc initRuleToProc*[T, S, R](): RuleToProc[T, S, R] =
-  return initTable[Rule[S], PTProc[T, S, R]]()
+proc initRuleToProc*[T, R](): RuleToProc[T, R] =
+  return initTable[Rule, PTProc[T, R]]()
 
-proc initRuleToProcNode(tokenType, tokenKind, returnType: NimNode): NimNode =
+proc initRuleToProcNode(tokenType, returnType: NimNode): NimNode =
   result = quote do:
-    result = initRuleToProc[`tokenType`, `tokenKind`, `returnType`]()
+    result = initRuleToProc[`tokenType`, `returnType`]()
 
 proc genKindNode(kindTy, kind: NimNode): NimNode =
   result = nnkDotExpr.newTree(
@@ -80,15 +81,15 @@ proc convertToSymNode(name: string, kindTy: NimNode,
   if name.isNonTerm(nimyInfo):
     let nameStrlit = newStrLitNode(name)
     result = quote do:
-      NonTermS[`kindTy`](`nameStrLit`)
+      NonTermS(`nameStrLit`)
   elif name.isTerm(nimyInfo):
     if name == "error":
       result = quote do:
-        ErrorS[`kindTy`]()
+        ErrorS()
     else:
       let nameId = ident(name)
       result = quote do:
-        TermS[`kindTy`](`kindTy`.`nameId`)
+        TermS(ord(`kindTy`.`nameId`))
   else:
     doAssert false
 
@@ -99,39 +100,27 @@ proc convertToSymNode(node, kindTy: NimNode,
   case node
   of BracketExpr([@innerSym]):
     return nnkCall.newTree(
-      nnkBracketExpr.newTree(
-        newIdentNode("NonTermS"),
-        kindTy
-      ),
+      newIdentNode("NonTermS"),
       newStrLitNode(nimyInfo[innerSym.strVal].optRule.strVal)
     )
   of CurlyExpr([@innerSym]):
     return nnkCall.newTree(
-      nnkBracketExpr.newTree(
-        newIdentNode("NonTermS"),
-        kindTy
-      ),
+      newIdentNode("NonTermS"),
       newStrLitNode(nimyInfo[innerSym.strVal].repRule.strVal)
     )
   of Bracket([]):
     return nnkCall.newTree(
-      nnkBracketExpr.newTree(
-        newIdentNode("Empty"),
-        kindTy
-      )
+      newIdentNode("Empty"),
     )
   of Ident(strVal: @name):
     return convertToSymNode(name, kindTy, nimyInfo)
   else:
     failwith node
 
-proc newRuleMakerNode(kindTy, prec: NimNode, left: NimNode,
+proc newRuleMakerNode(prec: NimNode, left: NimNode,
                       right: varargs[NimNode]): NimNode =
   result = nnkCall.newTree(
-    nnkBracketExpr.newTree(
-      newIdentNode("newRule"),
-      kindTy
-    ),
+    newIdentNode("newRule"),
     prec,
     left
   )
@@ -220,7 +209,7 @@ proc parseRuleAndBody(node, kindTy, tokenType, left: NimNode,
       let pv = prec.get
       quote do:
         some[Precedence](`pv`)
-  let ruleMaker = newRuleMakerNode(kindTy, precNode, left, right)
+  let ruleMaker = newRuleMakerNode(precNode, left, right)
   result = (ruleMaker, types, body, prec)
 
 proc parseLeft(clause: NimNode): (string, NimNode) =
@@ -261,7 +250,7 @@ proc makeRuleProc(name, body, rTy, tokenType, tokenKind: NimNode,
   let
     param = newIdentNode("nimyacctree")
     pTy =   nnkBracketExpr.newTree(newIdentNode("ParseTree"),
-                                   tokenType, tokenKind)
+                                   tokenType)
     params = @[rTy, nnkIdentDefs.newTree(param, pTy, newEmptyNode())]
   var
     procBody: NimNode
@@ -271,35 +260,41 @@ proc makeRuleProc(name, body, rTy, tokenType, tokenKind: NimNode,
   else:
     result = newProc(name, params)
 
-proc tableMakerProc(name, tokenType, tokenKind, topNonTerm,
-                    tableMaker: NimNode,
-                    rules, syms: seq[NimNode], precedence: var Table[string,(Precedence, Associativity)]): NimNode = 
+proc tableMakerProc(tokenType, tokenKind, topNonTerm: NimNode,
+                    rules, syms: seq[NimNode], precedence: var Table[string,(Precedence, Associativity)], parserType: NimNode): NimNode = 
   var body = nnkStmtList.newTree()
   body.add quote do:
     when defined(nimydebug):
       echo "START: making the Parser"
   let
-    setId = genSym(nskVar)
-    grmId = genSym(nskVar)
+    builderId = genSym(nskVar)
   body.add quote do:
-    var `setId`: seq[Rule[`tokenKind`]] = @[]
-  
+    # TODO set parser type later
+    var `builderId` = newGrammarBuilder(`topNonTerm`)
+    `builderId`.setParserType(ParserType.`parserType`)
   for rule in rules:
     body.add quote do:
-      `setId`.add(`rule`)
-  
-  body.add quote do:
-    var `grmId` = initGrammar(`setId`, `topNonTerm`)
+      `builderId`.addRule(`rule`)
   
   if precedence.len > 0:
     for tok, (prec, assoc) in precedence:
       body.add quote do:
-        `grmId`.precAssoc[`tok`]= (`prec`, Associativity(`assoc`))
+        try:
+          `builderId`.addPrecAssoc(parseEnum[`tokenKind`](`tok`).ord, `prec`, Associativity(`assoc`))
+        except:
+          when defined(nimydevel):
+            echo "ignoring fake token kind ", `tok`, " for prec/assoc considerations in grammar construction"
+          discard 
+  
   body.add quote do:
-    result = `tableMaker`[`tokenKind`](`grmId`)
+    let input = $toJson(`builderId`.toGrammar())
+    let resp = staticExec("yexe", input=input, cache=input)
+    var pt : ParsingTable
+    let x = parseJson(resp)
+    fromJson(pt, x)
+    pt
   result = quote do:
-    proc `name`(): ParsingTable[`tokenKind`] =
-      `body`
+    `body`
 
 proc getOpt(sym, ty, nt: NimNode): NimNode =
   # for input:
@@ -473,14 +468,14 @@ proc getRep(sym, ty, nt, nnt: NimNode): seq[NimNode] =
   )
   result.add(new)
 
-func parseHead(head: NimNode) : (NimNode, NimNode, ParserType) = 
+func parseHead(head: NimNode) : (NimNode, NimNode, NimNode) = 
   if head.matches(
     BracketExpr([@parserName, @tokenType, (strVal : @parserType)]) | 
     BracketExpr([@parserName, @tokenType])):
     if parserType.get("LALR") == "LALR":
-      return (parserName, tokenType, Lalr)
+      return (parserName, tokenType, ident("Lalr"))
     if parserType.get == "SLR":
-      return (parserName, tokenType, Slr)
+      return (parserName, tokenType, ident("Slr"))
     failwith "I only understand {LALR, SLR} but got unsupport parser type " & parserType.get
   else:
     failwith "I expected nimy <parserName>[<tokType>,[<parserType>]]"
@@ -545,6 +540,8 @@ proc validateRule(n : NimNode) =
       failwith "Invalid return type declaration in: " & repr n
     for ruleBody in rest:
       ruleBody.validateRuleBody()
+  of Call([Ident(),.._]):
+    failwith "invalid rule, missing return type. " & repr n 
   of CommentStmt():
     discard
   of Prefix():
@@ -580,15 +577,14 @@ iterator precAssocToks(n: NimNode): string =
       rest = rest[1]
     yield rest.strVal
 
+
+
+
+
 macro nimy*(head, body: untyped): untyped =
   let 
     (parserName, tokenType, parserType) = parseHead(head)
     tokenKind = ident(tokenType.strVal & "Kind")
-    tableMaker = case parserType
-        of Slr:
-          ident("makeTableSLR")
-        of Lalr:
-          ident("makeTableLALR")
   body.validateBody()
   
   var
@@ -629,10 +625,7 @@ macro nimy*(head, body: untyped): untyped =
     if first:
       topNonTerm = nonTerm
       topNonTermNode = nnkCall.newTree(
-        nnkBracketExpr.newTree(
-          newIdentNode("NonTermS"),
-          tokenKind
-        ),
+        newIdentNode("NonTermS"),
         newStrLitNode(nonTerm)
       )
       returnType = rType
@@ -757,7 +750,7 @@ macro nimy*(head, body: untyped): untyped =
       (nonTerm, rType) = parseLeft(clause)
       ruleClauses = clause[1]
     var ruleToProcMakerBody = nnkStmtList.newTree(
-      initRuleToProcNode(tokenType, tokenKind, rType)
+      initRuleToProcNode(tokenType, rType)
     )
 
     # read Rule
@@ -766,10 +759,7 @@ macro nimy*(head, body: untyped): untyped =
         continue
       let
         left = nnkCall.newTree(
-          nnkBracketExpr.newTree(
-            newIdentNode("NonTermS"),
-            tokenKind
-          ),
+          newIdentNode("NonTermS"),
           newStrLitNode(nonTerm)
         )
         # argTypes: seq[string] (name if nonterm)
@@ -819,7 +809,6 @@ macro nimy*(head, body: untyped): untyped =
         @[nnkBracketExpr.newTree(
           newIdentNode("RuleToProc"),
           tokenType,
-          tokenKind,
           rType
         )],
         ruleToProcMakerBody
@@ -862,41 +851,17 @@ macro nimy*(head, body: untyped): untyped =
       )
     )
   )
-  let
-    tmpName = genSym(nskProc)
-  result.add(
-    tableMakerProc(tmpName, tokenType, tokenKind, topNonTermNode, tableMaker,
-                   ruleIds, symNodes, precedence)
-  )
-  when defined(nimylet):
-    result.add(
-      newLetStmt(
-        nnkPostfix.newTree(
-          newIdentNode("*"),
-          parserName,
-        ),
-        nnkCall.newTree(
-          tmpName
-        )
-      )
-    )
-  else:
-    result.add(
-      newConstStmt(
-        nnkPostfix.newTree(
-          newIdentNode("*"),
-          parserName,
-        ),
-        nnkCall.newTree(
-          tmpName
-        )
-      )
-    )
+
+  let tableMakerBlock = tableMakerProc(tokenType, tokenKind, topNonTermNode,
+                   ruleIds[1..^1], symNodes, precedence, parserType)
+  result.add quote do:
+    const `parserName`* = static:
+      `tableMakerBlock`
 
   # add proc parse
   let procName = ident("parse_" & parserName.strVal)
   result.add quote do:
-    proc `procName`*[LS,T,S](parser: var Parser[S]; lexer: var NimlLexer[LS,T]): Option[`returnType`] = 
+    proc `procName`*[LS,T](parser: var Parser; lexer: var NimlLexer[LS,T]): Option[`returnType`] = 
       let tree = parseImpl(parser, lexer)
       if parser.hasError:
         return none[`returnType`]()

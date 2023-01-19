@@ -1,68 +1,80 @@
 import unittest
-import std/options
+import options
 include nimyacc/slr
 include nimyacc/lalr
+import sequtils
+
+proc newRule*(prec: Option[Precedence], left: Symbol, right: varargs[Symbol], index: int): Rule =
+  result = Rule(left: left, right: right.toSeq, prec: prec, index:index)
+
+proc newRule*(prec: Option[Precedence], left: Symbol, right: Symbol, index:int): Rule =
+  result = Rule(left: left, right: @[right], prec: prec, index:index)
+
 
 let
-  g = initGrammar[string](
+  g = initGrammar(
     [
-      newRule(none[Precedence](), NonTermS[string]("S"),
-              NonTermS[string]("C"),NonTermS[string]("C")),
-      newRule(none[Precedence](), NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
-      newRule(none[Precedence](), NonTermS[string]("C"), TermS("d")),
-    ].toOrderedSet,
-    NonTermS[string]("S")
+      newRule(none[Precedence](), NonTermS("S"),
+              NonTermS("C"),NonTermS("C"), 1),
+      newRule(none[Precedence](), NonTermS("C"),TermS(1), NonTermS("C"), 2),
+      newRule(none[Precedence](), NonTermS("C"),TermS(2), 3),
+    ],
+    NonTermS("S")
   ).augment
 
-  g415 = initGrammar[string](
+  g415 = initGrammar(
     [
-      newRule(none[Precedence](), NonTermS[string]("S"), NonTermS[string]("R")),
-      newRule(none[Precedence](), NonTermS[string]("S"),
-              NonTermS[string]("L"), TermS("="), NonTermS[string]("R")),
-      newRule(none[Precedence](), NonTermS[string]("L"), TermS("*"), NonTermS[string]("R")),
-      newRule(none[Precedence](), NonTermS[string]("L"), TermS("id")),
-      newRule(none[Precedence](), NonTermS[string]("R"), NonTermS[string]("L")),
-    ].toOrderedSet,
-    NonTermS[string]("S")
+      newRule(none[Precedence](), NonTermS("S"), NonTermS("R"), 1),
+      newRule(none[Precedence](), NonTermS("S"),
+              NonTermS("L"),TermS(3), NonTermS("R"), 2),
+      newRule(none[Precedence](), NonTermS("L"),TermS(4), NonTermS("R"), 3),
+      newRule(none[Precedence](), NonTermS("L"),TermS(5), 4),
+      newRule(none[Precedence](), NonTermS("R"), NonTermS("L"), 5),
+    ],
+    NonTermS("S")
   ).augment
 
 test "test closure for lalr":
   let
-    itm = LALRItem[string](rule: g.startRule, pos: 0, ahead: End[string]())
-    c = closure(g, toHashSet[LALRItem[string]]([itm]))
+    itm = LALRItem(ruleIdx: 0, pos: 0, ahead: End(), g:g)
+    c = closure(g, toHashSet[LALRItem]([itm]))
     expected =  [
       itm,
-      LALRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("S"),
-                      NonTermS[string]("C"),NonTermS[string]("C")),
+      LALRItem(
+        ruleIdx: 1,
         pos: 0,
-        ahead: End[string]()
+        ahead: End(),
+        g: g
       ),
-      LALRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
+      LALRItem(
+        ruleIdx: 2, 
         pos: 0,
-        ahead: TermS("c")
+        ahead:TermS(1),
+        g: g
       ),
-      LALRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("C"), TermS("c"), NonTermS[string]("C")),
+      LALRItem(
+        ruleIdx: 2,
         pos: 0,
-        ahead: TermS("d")
+        ahead:TermS(2),
+        g: g
       ),
-      LALRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("C"), TermS("d")),
+      LALRItem(
+        ruleIdx: 3,
         pos: 0,
-        ahead: TermS("c")
+        ahead:TermS(1),
+        g: g
       ),
-      LALRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("C"), TermS("d")),
+      LALRItem(
+        ruleIdx: 3, 
         pos: 0,
-        ahead: TermS("d")
+        ahead:TermS(2),
+        g: g
       )
     ].toHashSet
 
   check expected == c
 
-proc contains[T](itms: LALRItems[T], itm: LRItem[T]): bool =
+proc contains(itms: LALRItems, itm: LRItem): bool =
   result = false
   for i in itms:
     if i.toLRItem == itm:
@@ -75,11 +87,10 @@ test "test make LALR kernel":
   check kernel.card == 10
   for i, itms in kernel:
     if itms.contains(
-      LRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("S"),
-                      NonTermS[string]("L"), TermS("="),
-                      NonTermS[string]("R")),
-        pos: 1
+      LRItem(
+        ruleIdx: 2,
+        pos: 1,
+        g: g415
       )
     ):
       check itms.card == 2
@@ -88,26 +99,28 @@ test "test make LALR kernel":
   let lalrKernel = kernel.toLALRKernel(g415, tt)
   for i, itms in lalrKernel:
     if itms.contains(
-      LRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("R"), NonTermS[string]("L")),
-        pos: 1
+      LRItem(
+        ruleIdx: 5,
+        pos: 1, 
+        g: g415
       )
     ) or itms.contains(
-      LRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("L"),
-                      TermS("*"), NonTermS[string]("R")),
-        pos: 1
+      LRItem(
+        ruleIdx: 3,
+        pos: 1,
+        g: g415
       )
     ) or itms.contains(
-      LRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("L"), TermS("id")),
-        pos: 1
+      LRItem(
+        ruleIdx: 4,
+        pos: 1,
+        g: g415
       )
     ) or itms.contains(
-      LRItem[string](
-        rule: newRule(none[Precedence](), NonTermS[string]("L"),
-                      TermS("*"), NonTermS[string]("R")),
-        pos: 2
+      LRItem(
+        ruleIdx: 3,
+        pos: 2,
+        g: g415
       )
     ):
       check itms.card == 2

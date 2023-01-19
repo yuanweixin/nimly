@@ -6,6 +6,20 @@ description   = "Parser generator macro library"
 license       = "MIT"
 srcDir        = "src"
 
+installExt    = @["nim"]
+
+bin = @["nimyacc/yexe"] 
+
+requires "nim >= 1.6.8"
+
+import ospaths
+
+proc buildHelper(name: string) =
+  if not fileExists(name.toExe):
+    exec "nim c " & name
+
+task make, "builds yexe":
+  buildHelper "yexe"
 
 # Dependencies
 

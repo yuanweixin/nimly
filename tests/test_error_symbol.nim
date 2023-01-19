@@ -2,7 +2,7 @@ import unittest
 import patty
 import strutils
 import macros
-import std/math
+import math
 import nimyacc
 
 ## variant is defined in patty

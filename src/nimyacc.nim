@@ -8,8 +8,14 @@ import nimyacc/debuginfo
 import lexim
 import tables
 import sets
+import nimyacc/grammar_builder
+import std/jsonutils, json
+
+export jsonutils
+export json
 export tables
 export sets
+export grammar_builder
 
 export lexer
 

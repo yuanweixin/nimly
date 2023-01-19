@@ -2,7 +2,7 @@ import unittest
 import strutils
 import patty
 import nimyacc
-import std/options
+import options
 
 variant Token:
   CHARS(val: string)

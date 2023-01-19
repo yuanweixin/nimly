@@ -6,11 +6,12 @@ import patty
 import lexer
 import parsetypes
 import debuginfo
-import std/options
+import options
+import dev_assert
 
 # TODO would be nice to give user a way to handle parser error, but would need to research on how that even works.
 
-proc `$`*[T](i: ActionTableItem[T]): string =
+proc `$`*(i: ActionTableItem): string =
   match i:
     Shift(state: s):
       return "Shift(" & $s & ")"
@@ -21,20 +22,7 @@ proc `$`*[T](i: ActionTableItem[T]): string =
     Error:
       return "Error"
 
-proc Shift*[T](state: parsetypes.State): ActionTableItem[T] =
-  return ActionTableItem[T](kind: ActionTableItemKind.Shift, state: state)
-
-proc Reduce*[T](rule: Rule[T]): ActionTableItem[T] =
-  return ActionTableItem[T](kind: ActionTableItemKind.Reduce, rule: rule)
-
-proc Accept*[T](): ActionTableItem[T] =
-  return ActionTableItem[T](kind: ActionTableItemKind.Accept)
-
-proc Error*[T](): ActionTableItem[T] =
-  return ActionTableItem[T](kind: ActionTableItemKind.Error)
-
-
-proc `$`*[T, S](pt: ParseTree[T, S], indent: int = 0): string =
+proc `$`*[T](pt: ParseTree[T], indent: int = 0): string =
   match pt:
     Terminal(token: t):
       result = "  ".repeat(indent) & $t & "\n"
@@ -45,44 +33,44 @@ proc `$`*[T, S](pt: ParseTree[T, S], indent: int = 0): string =
     ErrorNode():
       result = " ".repeat(indent) & "errorNode\n"
 
-proc add[T](parser: var Parser[T], s: parsetypes.State) =
+proc add(parser: var Parser, s: parsetypes.State) =
   parser.stack.add(s)
 
-proc push[T](parser: var Parser[T], s: parsetypes.State) =
+proc push(parser: var Parser, s: parsetypes.State) =
   parser.add(s)
 
-proc pop[T](parser: var Parser[T]): parsetypes.State =
+proc pop(parser: var Parser): parsetypes.State =
   return parser.stack.pop
 
-proc top[T](parser: Parser[T]): parsetypes.State =
+proc top(parser: Parser): parsetypes.State =
   return parser.stack[parser.stack.high]
 
-proc nextChar[LS,T,S](lexer: var NimlLexer[LS,T], token: var T, symbol: var Symbol[S]) =
+proc nextChar[LS,T](lexer: var NimlLexer[LS,T], token: var T, symbol: var Symbol) =
   try:
     token = lexer.lexNext
-    symbol = TermS[S](token.kind)
+    symbol = TermS(ord(token.kind))
   except NimlEOFError:
-    symbol = End[S]()
+    symbol = End()
   except:
     raise # TODO eliminate exceptions from lexer. replace with error type. 
 
-proc parseImpl*[LS,T, S](parser: var Parser[S],
-                      lexer: var NimlLexer[LS,T]): ParseTree[T, S] =
+proc parseImpl*[LS,T](parser: var Parser,
+                      lexer: var NimlLexer[LS,T]): ParseTree[T] =
   var 
-    tree: seq[ParseTree[T, S]] = @[]
+    tree: seq[ParseTree[T]] = @[]
     token: T
-    symbol: Symbol[S]
-    prevErrorLookahead : Option[Symbol[S]]
+    symbol: Symbol
+    prevErrorLookahead : Option[Symbol]
   
   lexer.nextChar(token, symbol)
   while true:
     when defined(nimytrace):
       echo "\nparser stack:" & $parser.stack
       echo "read token:" & $symbol
-    var action: ActionTableItem[S]
+    var action: ActionTableItem
     
     if symbol notin parser.table.action[parser.top]:
-      action = Error[S]()
+      action = Error()
     else:
       action = parser.table.action[parser.top][symbol]
     
@@ -92,7 +80,7 @@ proc parseImpl*[LS,T, S](parser: var Parser[S],
     case action.kind
     of ActionTableItemKind.Shift:
       let s = action.state
-      tree.add(Terminal[T, S](token))
+      tree.add(Terminal[T](token))
       lexer.nextChar(token, symbol)
       parser.push(s)
     of ActionTableItemKind.Reduce:
@@ -101,7 +89,7 @@ proc parseImpl*[LS,T, S](parser: var Parser[S],
       for i in 0..<r.lenWithoutEmpty:
         discard parser.pop
         discard tree.pop
-      tree.add(NonTerminal[T, S](r, reseted))
+      tree.add(NonTerminal[T](r, reseted))
       parser.push(parser.table.goto[parser.top][r.left])
     of ActionTableItemKind.Accept:
       when defined(nimytrace):
@@ -109,8 +97,8 @@ proc parseImpl*[LS,T, S](parser: var Parser[S],
           echo tree[0]
         else:
           echo tree
-      doAssert tree.len == 1, "Error, parsing result is wrong."
-      return NonTerminal[T, S](rule = Rule[S](), tree =tree)
+      nimyaccAssert tree.len == 1, "Error, parsing result is wrong."
+      return NonTerminal[T](rule = Rule(), tree =tree)
     of ActionTableItemKind.Error:
       if prevErrorLookahead.isSome and parser.stack.len <= 1:
         # infinite loop detection: for the case when there is 
@@ -122,15 +110,15 @@ proc parseImpl*[LS,T, S](parser: var Parser[S],
         when defined(nimytrace):
           echo "infinite loop detected: no progress possible with an empty stack and lookahead, discarding lookahead to try again. lookahead=" & $prevErrorLookahead.get 
         # sanity check
-        doAssert prevErrorLookahead.get == symbol
+        nimyaccAssert prevErrorLookahead.get == symbol
         lexer.nextChar(token, symbol)
 
       parser.hasError = true 
       # are we out of luck (tokens)? 
-      if symbol == End[S]():
+      if symbol == End():
         # we will just return ErrorNode as the parse tree. 
-        return ErrorNode[T,S]()
-      let errSym = ErrorS[S]()
+        return ErrorNode[T]()
+      let errSym = ErrorS()
 
       prevErrorLookahead = some symbol  
       # pop the stack until we reach state in which the 
@@ -152,30 +140,31 @@ proc parseImpl*[LS,T, S](parser: var Parser[S],
           # shift the error symbol
           when defined(nimytrace):
             echo "adding ErrorNode to parse tree"
-          tree.add(ErrorNode[T,S]())
+          tree.add(ErrorNode[T]())
           parser.push(parser.table.action[parser.top][errSym].state)
           # skip lookaheads until a state is reached that 
           # has a non-error action on the lookahead
-          while symbol != End[S]() and 
+          while symbol != End() and 
             (symbol notin parser.table.action[parser.top] or 
               parser.table.action[parser.top][symbol].kind == ActionTableItemKind.Error):
               when defined(nimytrace):
                 echo "discarding lookahead=" & $token
               lexer.nextChar(token, symbol)
-          if symbol == End[S]():
-            return ErrorNode[T,S]()
+          if symbol == End():
+            return ErrorNode[T]()
       # it is just a syntax error if "error" is not in the rule. do not try 
       # to complicate things further say by discarding lookaheads and see if 
       # we can eventually parse something. more sane to bail at this point. 
-      return ErrorNode[T,S]()
+      return ErrorNode[T]()
         
 
-proc newParser*[T](t: ParsingTable[T]): Parser[T] =
-  result = Parser[T](stack: @[0], table: t, provisionalToksCnt: 0, hasError:false)
-  result.init()
-
-proc init*[T](p: var Parser[T]) =
+proc init*(p: var Parser) =
   # annoyingly, "reset" is a built-in proc that sets something to its default state,
   # so we can't name this proc "reset" because if we do the system.reset get called
   # and bad things happen. will keep calling this "init". 
   p.stack = @[0]
+
+proc newParser*(t: ParsingTable): Parser =
+  result = Parser(stack: @[0], table: t, provisionalToksCnt: 0, hasError:false)
+  result.init()
+

@@ -1,5 +1,5 @@
 import unittest
-import std/options
+import options
 import nimyacc
 import parser_415
 import parser_415_lr

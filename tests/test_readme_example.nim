@@ -1,7 +1,7 @@
 import unittest
 import patty
 import strutils
-import std/options
+import options
 import nimyacc
 
 ## variant is defined in patty

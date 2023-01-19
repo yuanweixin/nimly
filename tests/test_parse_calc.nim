@@ -3,7 +3,7 @@ import patty
 import strutils
 
 import nimyacc
-import std/options
+import options
 
 variant MyToken:
   PLUS
