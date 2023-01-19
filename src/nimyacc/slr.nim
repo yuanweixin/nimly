@@ -101,7 +101,7 @@ proc makeCanonicalCollection*(g: Grammar): (SetOfLRItems,
         echo "checkSet size is " & $checkset.len
         inc iter 
     for itms in checkSet:
-      let frm = cc.indexOf(itms) # TODO OrderedTable from itm -> idx might make more sense here
+      let frm = cc.indexOf(itms) 
       nimyaccAssert itms == g.closure(itms)
       var symbolsSeen : HashSet[Symbol] # tracks which symbols we already done transitions for in this automaton state! 
       for i in itms:

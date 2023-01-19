@@ -25,20 +25,17 @@ func validateRight(rs: varargs[Symbol]) =
     for r in rs:
         validateRight(r)
 
-func addRule*(gb: var GrammarBuilder,  prec: Option[Precedence], left: Symbol, right: Symbol) = 
-    validateLeft(left)
-    validateRight(right)
-    gb.rules.incl Rule(left: left, right: @[right], prec: prec, index: 0)
-
 func addRule*(gb: var GrammarBuilder,  r: Rule) = 
-    validateLeft(r.left)
-    validateRight(r.right)
+    doAssert r notin gb.rules, "Duplicate rule in grammar: " & $r
     gb.rules.incl r
 
+func addRule*(gb: var GrammarBuilder,  prec: Option[Precedence], left: Symbol, right: Symbol) = 
+    let r = Rule(left: left, right: @[right], prec: prec, index: 0)
+    gb.addRule r
+
 func addRule*(gb: var GrammarBuilder,  prec: Option[Precedence], left: Symbol, right: varargs[Symbol]) = 
-    validateLeft(left)
-    validateRight(right)
-    gb.rules.incl Rule(left: left, right: right.toSeq, prec: prec, index: 0)
+    let r = Rule(left: left, right: right.toSeq, prec: prec, index: 0)
+    gb.addRule r 
   
 func addPrecAssoc*(gb: var GrammarBuilder, tok: int, prec: int, assoc: Associativity) = 
     doAssert tok notin gb.precAssoc, "Trying to add (precedence, associativity) = " & $prec & "," & $assoc & " but it has been added already. Check your specification"
@@ -51,6 +48,8 @@ func toGrammar*(gb: var GrammarBuilder) : Grammar =
     var curIdx = 1 
     var rules = @[startRule]
     for r in gb.rules:
+        validateLeft(r.left)
+        validateRight(r.right)
         rules.add Rule(left: r.left, right: r.right, prec: r.prec, index: curIdx)
         inc curIdx
     result = Grammar(rules: rules, start: start, precAssoc: gb.precAssoc)

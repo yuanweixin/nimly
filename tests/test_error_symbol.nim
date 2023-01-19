@@ -76,8 +76,49 @@ test "appel book example":
   var testLexer = testLex.newWithString(42, ")ID")
   var parser = testPar.newParser()
   discard parser.parse_testPar(testLexer) 
+  check parser.hasError
 
 test "infinite loop does not occur":
   var testLexer = testLex.newWithString(42, ")ID")
   var parser = infiniteLoop.newParser()
   discard parser.parse_infiniteLoop(testLexer) 
+  check parser.hasError
+
+test "2 errors at least 3 shifts apart, both get reported":
+  var testLexer = testLex.newWithString(42, "(+) + (+) + ID")
+  var cnt = 0
+  proc onError(pos: int) = 
+    inc cnt
+  var parser = testPar.newParser(onError)
+  discard parser.parse_testPar(testLexer) 
+  check cnt == 2
+  check parser.hasError
+
+test "2 errors within 3 shifts, only 1 is reported":
+  var testLexer = testLex.newWithString(42, "(+) + +) + ID")
+  # stack, lookahead, action
+  # 0, (, shift
+  # 0 (, +, error! 
+  # 0 (, +, shift error
+  # 0 ( error, +, drop lookahead
+  # 0 ( error, ), shift 
+  # 0 ( error ), +, reduce 
+  # 0 exp, +, shift
+  # 0 exp +, +, error! 
+  # 0 exp +, +, pop +, pop exp
+  # 0, +, shift error
+  # 0 error, +, drop lookahead
+  # 0 error, ), drop lookahead
+  # 0 error, +, drop lookahead
+  # 0 error, ID, shift
+  # 0 error ID, reduce 
+  # 0 exps, $, accept 
+  # 
+  # there's only 2 shifts between the first and second error, so only 1 call to onError happens
+  var cnt = 0
+  proc onError(pos: int) = 
+    inc cnt
+  var parser = testPar.newParser(onError)
+  discard parser.parse_testPar(testLexer) 
+  check parser.hasError
+  check cnt == 1

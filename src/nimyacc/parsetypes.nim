@@ -108,6 +108,8 @@ type
     table*: ParsingTable
     provisionalToksCnt*: int 
     hasError*: bool
+    onError*: proc (pos: int) {.closure.}
+    onEof*: proc (pos: int) {.closure.}
 
 variantp ParseTree[T]:
   Terminal(token: T)
@@ -234,14 +236,10 @@ proc initGrammar*(rules: openArray[Rule],
 iterator filterRulesLeftIs*(g: Grammar, x: Symbol): Rule = 
   for r in g.rules:
     if r.left == x:
-      # TODO add test case for duplicate rules as part of grammar validation? 
       yield r 
 
 proc isAugment*(g: Grammar): bool =
   result = (g.start == NonTermS("__Start__"))
-  # TODO add proper validation to grammar not this crap 
-  # assert (g.filterRulesLeftIs(g.start).len != 0),
-    #  "`g` is invalid grammar."
 
 proc startRule*(g: Grammar): Rule =
   nimyaccAssert g.isAugment, "`g` is not augmented grammar."
@@ -252,14 +250,14 @@ proc startRule*(g: Grammar): Rule =
   nimyaccAssert (cnt == 1), "`g` is invalid grammar. Found more than 1 start rule."
 
 proc symbolSet*(g: Grammar): HashSet[Symbol] =
-  for r in g.rules: # TODO assumes rhs are reachable from start. Add validation
+  for r in g.rules: 
     for s in r.right:
       result.incl(s)
   result.incl(g.start)
 
 proc nonTermSymbolSet*(g: Grammar): HashSet[Symbol] =
   for r in g.rules:
-    for s in r.right: # TODO assumes rhs reachable from start. Add validation. 
+    for s in r.right: 
       if s.kind == SymbolKind.NonTermS:
         result.incl(s)
   result.incl(g.start)
@@ -328,8 +326,6 @@ proc makeFollowTable*(g: Grammar): FollowTable =
       
       for i in countdown(r.right.len - 1, 0):
         let sym = r.right[i]
-        # TODO validate valid symbols in rule, not this crap 
-        # assert sym != End()
         # A -> aBb, everything in FIRST(b)-{Empty} is in FOLLOW(B)
         match sym:
           TermS:

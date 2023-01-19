@@ -3,12 +3,11 @@ import macros
 import tables
 import sets
 
-import marshal
 import parsetypes
 import parser
 import fusion/matching
 import grammar_builder
-import std/jsonutils, json, marshal
+import std/jsonutils, json
 
 type
   PTProc[T, R] = proc(nimyacctree: ParseTree[T]): R {.nimcall.}
@@ -64,14 +63,11 @@ proc initRuleToProcNode(tokenType, returnType: NimNode): NimNode =
   result = quote do:
     result = initRuleToProc[`tokenType`, `returnType`]()
 
-proc genKindNode(kindTy, kind: NimNode): NimNode =
-  result = nnkDotExpr.newTree(
-    kindTy,
-    kind
-  )
-
-proc failwith(reason: string) = 
-  raise newException(Exception, reason)
+proc failwith(reasons: varargs[string, `$`]) = 
+  var msg = ""
+  for x in reasons:
+    msg.add x
+  raise newException(Exception, msg)
 
 proc failwith(node: NimNode) = 
   raise newException(Exception, "I do not understand this: " & repr node)
@@ -149,7 +145,7 @@ proc isTerm(node: NimNode, nimyInfo: NimyInfo): bool =
   of Ident(strVal: @strVal):
     return not strVal.isNonTerm(nimyInfo)
   else:
-    failwith "unexpected rhs symbol " & repr node
+    failwith "unexpected rhs symbol ", repr node
   
 iterator ruleRight(node: NimNode, excludePrec : bool = true): NimNode =
   # this ends up yielding each NimNode on the rhs of production
@@ -167,11 +163,11 @@ iterator ruleRight(node: NimNode, excludePrec : bool = true): NimNode =
     else:
       yield nd 
   else:
-    failwith "I do not understand this rule rhs: " & repr node
+    failwith "I do not understand this rule rhs: ", repr node
 
 proc parseRuleAndBody(node, kindTy, tokenType, left: NimNode,
                       nimyInfo: var NimyInfo, precAssoc: var Table[string,(Precedence,Associativity)]): (
-                        NimNode, seq[string], NimNode, Option[Precedence]) =
+                        NimNode, seq[string], NimNode) =
   node.expectKind({nnkCall, nnkCommand})
   var
     right: seq[NimNode] = @[]
@@ -187,14 +183,14 @@ proc parseRuleAndBody(node, kindTy, tokenType, left: NimNode,
     body = b 
     noEmpty = true 
   else:
-    failwith "Unable to extract body from " & repr node
+    failwith "Unable to extract body from ", repr node
 
   var prec = none[Precedence]()
   for sym in node.ruleRight(excludePrec=false):
     if sym.kind == nnkPrefix:
       if sym.matches(Prefix([_, Command([_, Ident(strVal: @tok)])])):
         if tok notin precAssoc:
-          failwith "missing top level precedence declaration for token " & tok & " used in " & repr node
+          failwith "missing top level precedence declaration for token ", tok, " used in ", repr node
         prec = some(precAssoc[tok][0])
       else:
         failwith "bug in dsl validation"
@@ -210,14 +206,14 @@ proc parseRuleAndBody(node, kindTy, tokenType, left: NimNode,
       quote do:
         some[Precedence](`pv`)
   let ruleMaker = newRuleMakerNode(precNode, left, right)
-  result = (ruleMaker, types, body, prec)
+  result = (ruleMaker, types, body)
 
 proc parseLeft(clause: NimNode): (string, NimNode) =
   case clause
   of Call([BracketExpr([(strVal: @nonTerm), @rType]), .._]):
     return (nonTerm, rType)
   else:
-    failwith "lhs is not in expected form, got " & repr clause
+    failwith "lhs is not in expected form, got ", repr clause
   
 proc isSpecialVar(n: NimNode): bool =
   return n.matches(Prefix([Ident(strVal: "$"), IntLit()]))
@@ -475,9 +471,9 @@ func parseHead(head: NimNode) : (NimNode, NimNode, NimNode) =
       return (parserName, tokenType, ident("Lalr"))
     if parserType.get == "SLR":
       return (parserName, tokenType, ident("Slr"))
-    failwith "I only understand {LALR, SLR} but got unsupport parser type " & parserType.get
+    failwith "I only understand {LALR, SLR} but got unsupport parser type ", parserType.get
   else:
-    failwith "I expected nimy <parserName>[<tokType>,[<parserType>]]"
+    failwith "I expected nimy <parserName>[<tokType>,[<parserType>]] but got ", repr head
 
 func validRhsSymType(n: NimNode) : bool = 
   return n.matches(Ident() | BracketExpr([Ident()]) | CurlyExpr([Ident()]))
@@ -503,12 +499,12 @@ proc validateRuleBody(n: NimNode) =
   of Command([_.validRhsSymType(), @c is Command(), StmtList()]):
     while c.kind == nnkCommand:
       if not c[0].validRhsSymType():
-        failwith "invalid rule body "  & repr n 
+        failwith "invalid rule body ", repr n 
       c = c[1]
     if not c.validRhsSymType() and not c.validRuleLevelPrec():
-      failwith "invalid rule body " & repr n
+      failwith "invalid rule body ", repr n
   else:
-    failwith "invalid rule body " & repr n 
+    failwith "invalid rule body ", repr n 
 
 func validNestedTypeBracketExpr(n: NimNode) : bool = 
   var nd = n 
@@ -528,25 +524,25 @@ proc validateRule(n : NimNode) =
   of Prefix([Ident(strVal: "%"), Command([_.validAssociativity(), @rest is Command()])]):
     while rest.kind == nnkCommand:
       if not rest[0].validToken():
-        failwith "invalid associativity declaration " & repr n 
+        failwith "invalid associativity declaration ", repr n 
       rest = rest[1]
     if not rest.validToken():
-      failwith "invalid associativity declaration " & repr n 
+      failwith "invalid associativity declaration ", repr n 
   of Call([BracketExpr([Ident(strVal: @lhs), @idOrNestedType is Ident()|BracketExpr()]), @rest is StmtList()]): # top[string] vs top[seq[string]]
     if lhs == "error":
-      failwith "'error' is reserved for error symbol, cannot use it as a nonterminal, but got " & repr n
+      failwith "'error' is reserved for error symbol, cannot use it as a nonterminal, but got ", repr n
     if idOrNestedType.kind == nnkBracketExpr and not idOrNestedType.validNestedTypeBracketExpr():
-      failwith "Invalid return type declaration in: " & repr n
+      failwith "Invalid return type declaration in: ", repr n
     for ruleBody in rest:
       ruleBody.validateRuleBody()
   of Call([Ident(),.._]):
-    failwith "invalid rule, missing return type. " & repr n 
+    failwith "invalid rule, missing return type. ", repr n 
   of CommentStmt():
     discard
   of Prefix():
-    failwith "invalid associativity declaration " & repr n 
+    failwith "invalid associativity declaration ", repr n 
   else:
-    failwith "invalid rule : " & repr n
+    failwith "invalid rule : ", repr n
 
 proc validateBody(n : NimNode) = 
   doAssert n.kind == nnkStmtList 
@@ -762,7 +758,7 @@ macro nimy*(head, body: untyped): untyped =
           newStrLitNode(nonTerm)
         )
         # argTypes: seq[string] (name if nonterm)
-        (ruleMaker, argTypes, clauseBody, prec) = parseRuleAndBody(
+        (ruleMaker, argTypes, clauseBody) = parseRuleAndBody(
           ruleClause, tokenKind, tokenType, left, nimyInfo, 
           precedence
         )
