@@ -265,6 +265,8 @@ nimy testPar[Token]:
         Id lvaluetail:
             return "TODO"
     lvaluetail[string]:
+        []:
+            return "TODO"
         Dot Id lvaluetail:
             return "TODO"
         Lbrack exp Rbrack lvaluetail:
@@ -284,12 +286,7 @@ nimy testPar[Token]:
             return "TODO"
         exp:
             return "TODO"
-        exp Semicolon sequence_rest:
-            return "TODO"
-    sequence_rest[string]:
-        exp:
-            return "TODO"
-        exp Semicolon sequence_rest:
+        exp Semicolon sequence:
             return "TODO"
     args[string]:
         []:

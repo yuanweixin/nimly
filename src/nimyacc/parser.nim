@@ -34,6 +34,7 @@ template nextChar() {.dirty.} =
     symbol = TermS(ord(token.token.kind))
     inc tokenCount 
 
+
 proc parseImpl*[LS,T](parser: var Parser,
                       lexer: var NimlLexer[LS,T]): ParseTree[T] =
   var 
@@ -48,7 +49,7 @@ proc parseImpl*[LS,T](parser: var Parser,
   while true:
     when defined(nimytrace):
       echo "\nparser stack:", parser.stack
-      echo "read token: ", token
+      echo "read token from lexer: ", token
     var action: ActionTableItem
     
     if symbol notin parser.table.action[parser.top]:
@@ -62,12 +63,11 @@ proc parseImpl*[LS,T](parser: var Parser,
     case action.kind
     of ActionTableItemKind.Shift:
       dec minShiftsToReportError
-      let s = action.state
       tree.add(Terminal[T](token.token))
       when defined(nimytrace):
-        echo "Shifted ", token
+        echo "Shifted ", action.state
       nextChar()
-      parser.push(s)
+      parser.push(action.state)
     of ActionTableItemKind.Reduce:
       let r = action.rule
       let reseted = tree[^r.lenWithoutEmpty..^1]
