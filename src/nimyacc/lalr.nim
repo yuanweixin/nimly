@@ -196,7 +196,7 @@ proc makeTableLALR*(g: Grammar, dctx: var DebugContext): ParsingTable =
     dctx.debugStr.add cntSR, " shift-reduce conflict(s)"
     dctx.debugStr.add cntRR, " reduce-reduce conflict(s)"
     dctx.debugStr.add "=============================="
-    dctx.debugStr.add "LALR automaton"
+    dctx.debugStr.add "LALR automaton\n"
     for idx, itms in lalrKnl:
       dctx.debugStr.add "state ", idx 
       var clj = ag.closure(itms)

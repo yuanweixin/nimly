@@ -3,6 +3,7 @@ import dotted
 import options
 import tables
 import sets
+import patty
 
 const
   nimydebug* {.strdefine.} = ""
@@ -22,6 +23,98 @@ type DebugContext* = object
   doGenGraphViz* : bool  
   dotStr* : string 
   debugStr* : string 
+
+proc `$`*(r: Symbol) : string = 
+  case r.kind
+    of SymbolKind.TermS:
+      result.add $r.term
+    of SymbolKind.NonTermS:
+      result.add $r.nonTerm
+    of SymbolKind.Dummy:
+      result.add "#"
+    of SymbolKind.End:
+      result.add "$"
+    of SymbolKind.Empty:
+      result.add "epsilon"
+    of SymbolKind.ErrorS:
+      result.add "error"
+
+proc `$`*(rule: Rule) : string = 
+  result.add rule.left.nonTerm
+  result.add " -> "
+  for i,r in rule.right:
+    result.add `$`r
+    if i < rule.right.len-1:
+      result.add " " 
+
+proc `$`*[T](pt: ParseTree[T], indent: int = 0): string =
+  match pt:
+    Terminal(token: t):
+      result = "  ".repeat(indent) & $t & "\n"
+    NonTerminal(rule: r, tree: t):
+      result = "  ".repeat(indent) & "rule: " & $r & "\n"
+      for n in t:
+        result = result & `$`(n, indent + 1)
+    ErrorNode():
+      result = " ".repeat(indent) & "errorNode\n"
+
+proc `$`*(i: ActionTableItem): string =
+  match i:
+    Shift(state: s):
+      return "Shift(" & $s & ")"
+    Reduce(rule: r):
+      return "Reduce(" & $r & ")"
+    Accept:
+      return "Accept"
+    Error:
+      return "Error"
+
+proc `$`*(ft: FollowTable): string =
+  result = "\n--------\n"
+  for i, itms in ft:
+    result.add $i
+    result.add ":"
+    result.add $itms
+    result.add "\n"
+  result.add "--------\n"
+
+proc `$`*(g: Grammar): string = 
+    result = "\n---- Grammar ----\n"
+    for i,r in g.rules:
+      result.add $i
+      result.add " " 
+      result.add $r
+      result.add "\n"
+    
+proc `$`*(at: ActionTable): string =
+  result = "\nActionTable:\n--------\n"
+  for s, row in at:
+    result.add "state "
+    result.add $s
+    result.add ":\n"
+    for sym, ati in row:
+      result.add "\t"
+      result.add `$`sym
+      result.add ":"
+      result.add `$`ati
+      result.add "\n"
+    result.add "\n"
+  result.add "--------\n"
+
+proc `$`*(gt: GotoTable): string =
+  result = "\nGotoTable:\n--------\n"
+  for s, row in gt:
+    result.add "state "
+    result.add $s
+    result.add ":\n"
+    for sym, dst in row:
+      result.add "\t"
+      result.add `$`sym
+      result.add ":"
+      result.add $dst
+      result.add "\n"
+    result.add "\n"
+  result.add "--------\n"
 
 proc add*(s: var string, itms: varargs[string, `$`]) = 
   ## this terminates with a newline. 
@@ -48,7 +141,7 @@ func populateRuleStringWithDot(result: var string, lhs: string, rhs: seq[Symbol]
   for pos, r in rhs:
     if pos == position:
       result.add ". "
-    result.add $r
+    result.add `$`r
     result.add " "
   if position == rhs.len:
     result.add ". "
@@ -67,7 +160,7 @@ proc `$`*(i: LALRItem, lookaheads: HashSet[Symbol]=initHashSet[Symbol]()): strin
   result.add " ["
   var i = 0 
   for la in lookaheads:
-      result.add $la
+      result.add `$`la
       if i < lookaheads.len-1:
         result.add ", "
       inc i 
@@ -208,51 +301,3 @@ proc populateDotGraph*(gr: var Graph, itms: LALRItems, g: Grammar, at: var Actio
   discard gr.node($state, some ns) # add the state node
   populateGraphNodeAction(gr, g, at, gt, state)
       
-proc `$`*(r: Symbol) : string = 
-  case r.kind
-    of SymbolKind.TermS:
-      result.add $r.term
-    of SymbolKind.NonTermS:
-      result.add $r.nonTerm
-    of SymbolKind.Dummy:
-      result.add "#"
-    of SymbolKind.End:
-      result.add "$"
-    of SymbolKind.Empty:
-      result.add "epsilon"
-    of SymbolKind.ErrorS:
-      result.add "error"
-
-proc `$`*(rule: Rule) : string = 
-  result.add rule.left.nonTerm
-  result.add " -> "
-  for i,r in rule.right:
-    result.add $r
-    if i < rule.right.len-1:
-      result.add " " 
-
-proc `$`*(ft: FollowTable): string =
-  result = "\n--------\n"
-  for i, itms in ft:
-    result = result & $i & ":" & $itms & "\n"
-  result = result & "--------\n"
-
-proc `$`*(g: Grammar): string = 
-    result = "\n---- Grammar ----\n"
-    for i,r in g.rules:
-      result.add $i
-      result.add " " 
-      result.add $r
-      result.add "\n"
-    
-proc `$`*(at: ActionTable): string =
-  result = "\nActionTable:\n--------\n"
-  for s, row in at:
-    result = result & $s & ":" & $row & "\n"
-  result = result & "--------\n"
-
-proc `$`*(gt: GotoTable): string =
-  result = "\nGotoTable:\n--------\n"
-  for s, row in gt:
-    result = result & $s & ":" & $row & "\n"
-  result = result & "--------\n"

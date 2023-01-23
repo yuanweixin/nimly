@@ -11,28 +11,6 @@ import dev_assert
 
 # TODO would be nice to give user a way to handle parser error, but need more research
 
-proc `$`*(i: ActionTableItem): string =
-  match i:
-    Shift(state: s):
-      return "Shift(" & $s & ")"
-    Reduce(rule: r):
-      return "Reduce(" & $r & ")"
-    Accept:
-      return "Accept"
-    Error:
-      return "Error"
-
-proc `$`*[T](pt: ParseTree[T], indent: int = 0): string =
-  match pt:
-    Terminal(token: t):
-      result = "  ".repeat(indent) & $t & "\n"
-    NonTerminal(rule: r, tree: t):
-      result = "  ".repeat(indent) & "rule: " & $r & "\n"
-      for n in t:
-        result = result & `$`(n, indent + 1)
-    ErrorNode():
-      result = " ".repeat(indent) & "errorNode\n"
-
 proc add(parser: var Parser, s: parsetypes.State) =
   parser.stack.add(s)
 
