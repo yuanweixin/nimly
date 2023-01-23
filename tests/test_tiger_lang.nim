@@ -200,147 +200,147 @@ nimy testPar[Token]:
     %left Uminus 
     prog[string]:
        exp:
-        return $1  
+        return "ok" 
     exp[string]:
         Nil:
-            return "TODO"
+            return "ok"
         Int:
-            return "TODO"
+            return "ok"
         String:
-            return "TODO"
+            return "ok"
         Id Lbrack exp Rbrack Of exp:
-            return "TODO"
+            return "ok"
         Id Lbrace field_value_list Rbrace:
-            return "TODO"
+            return "ok"
         lvalue:
-            return "TODO"
+            return "ok"
         lvalue Assign exp:
-            return "TODO"
+            return "ok"
         exp Lparen args Rparen:
-            return "TODO"
+            return "ok"
         exp Or exp:
-            return "TODO"
+            return "ok"
         exp And exp:
-            return "TODO"
+            return "ok"
         exp Eq exp:
-            return "TODO"
+            return "ok"
         exp Neq exp:
-            return "TODO"
+            return "ok"
         exp Lt exp:
-            return "TODO"
+            return "ok"
         exp Le exp:
-            return "TODO"
+            return "ok"
         exp Gt exp:
-            return "TODO"
+            return "ok"
         exp Ge exp:
-            return "TODO"
+            return "ok"
         exp Plus exp:
-            return "TODO"
+            return "ok"
         exp Minus exp:
-            return "TODO"
+            return "ok"
         exp Times exp:
-            return "TODO"
+            return "ok"
         exp Divide exp:
-            return "TODO"
+            return "ok"
         Minus exp %prec Uminus:
-            return "TODO"
+            return "ok"
         If exp Then exp Else exp: 
-            return "TODO"
+            return "ok"
         If exp Then exp: 
-            return "TODO"
+            return "ok"
         While exp Do exp: 
-            return "TODO"
+            return "ok"
         For Id Assign exp To exp Do exp:
-            return "TODO"
+            return "ok"
         Break:
-            return "TODO"
+            return "ok"
         Let decs In sequence End:
-            return "TODO"
+            return "ok"
         Lparen sequence Rparen:
-            return "TODO"
+            return "ok"
     field_value_list[string]:
         Id Eq exp:
-            return "TODO"
+            return "ok"
         Id Eq exp Comma field_value_list:
-            return "TODO"
+            return "ok"
     lvalue[string]:
         Id: 
-            return "TODO"
+            return "ok"
         Id lvaluetail:
-            return "TODO"
+            return "ok"
     lvaluetail[string]:
         []:
-            return "TODO"
+            return "ok"
         Dot Id lvaluetail:
-            return "TODO"
+            return "ok"
         Lbrack exp Rbrack lvaluetail:
-            return "TODO"
+            return "ok"
     fields[string]:
         []:
-            return "TODO"
+            return "ok"
         Id Colon Id tyfieldstail:
-            return "TODO"
+            return "ok"
     tyfieldstail[string]:
         []:
-            return "TODO"
+            return "ok"
         Comma Id Colon Id tyfieldstail:
-            return "TODO"
+            return "ok"
     sequence[string]:
         []:
-            return "TODO"
+            return "ok"
         exp:
-            return "TODO"
+            return "ok"
         exp Semicolon sequence:
-            return "TODO"
+            return "ok"
     args[string]:
         []:
-            return "TODO"
+            return "ok"
         exp:
-            return "TODO"
+            return "ok"
         exp Comma args_rest:
-            return "TODO"
+            return "ok"
     args_rest[string]:
         exp:
-            return "TODO"
+            return "ok"
         exp Comma args_rest:
-            return "TODO"
+            return "ok"
     type_opt[string]:
         []:
-            return "TODO"
+            return "ok"
         Colon Id:
-            return "TODO"
+            return "ok"
     vardec[string]:
         Var Id type_opt Assign exp:
-            return "TODO"
+            return "ok"
     fundec[string]:
         Function Id Lparen fields Rparen type_opt Eq exp:
-            return "TODO"
+            return "ok"
         Function Id Lparen fields Rparen type_opt Eq exp fundec:
-            return "TODO"
+            return "ok"
     tydec[string]:
         Type Id Eq ty:
-            return "TODO"
+            return "ok"
         Type Id Eq ty tydec:
-            return "TODO"
+            return "ok"
     ty[string]:
         Id:
-            return "TODO"
+            return "ok"
         Lbrace fields Rbrace:
-            return "TODO"
+            return "ok"
         Array Of Id:
-            return "TODO"
+            return "ok"
     decs[string]:
         dec decs:
-            return "TODO"
+            return "ok"
         []:
-            return "TODO"
+            return "ok"
     dec[string]:
         vardec:
-            return $1
+            return "ok"
         fundec:
-            return $1
+            return "ok"
         tydec:
-            return $1
+            return "ok"
 
 test "parses merge.tig":
     var state : LexerState
