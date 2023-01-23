@@ -1,3 +1,7 @@
+discard """
+  # flags with which to run the test, delimited by `;`
+  matrix: "-d:release"
+"""
 import unittest
 import patty 
 import nimyacc
@@ -348,5 +352,9 @@ test "parses merge.tig":
 
 
 test "parses queens.tig":
+    var state : LexerState
     let input = readFile("tests/queens.tig")
-    discard
+    var lexer = testLex.newWithString(state, input)
+    var parser = testPar.newParser()
+    discard parser.parse_testPar(lexer)
+    doAssert not parser.hasError
