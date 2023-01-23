@@ -392,43 +392,40 @@ proc tableMakerProc(parserName, tokenType, tokenKind, topNonTerm: NimNode,
         except:
           echo "ignoring fake token kind ", `tok`, " for prec/assoc considerations in grammar construction"
   let yi = genSym(nskVar)
-  let yo = genSym(nskVar)
   body.add quote do:
     var `yi` : YexeInput
     `yi`.g = `builderId`.toGrammar()
     `yi`.parserType = ParserType.`parserType`
   
   when defined(nimydebug):
+    let debugPath = debuginfo.nimydebug
     body.add quote do:
-      `yi`.dctx.doGenDebugString = true
+      `yi`.doGenDebugString = true
+      `yi`.debugPath = `debugPath`
+
   when defined(nimygraphviz):
+    let dotPath = debuginfo.nimygraphviz
     body.add quote do:
-      `yi`.dctx.doGenGraphViz = true 
+      `yi`.doGenGraphViz = true 
+      `yi`.dotPath = `dotPath`
+
+  let genPt = genSym(nskVar)
   body.add quote do:
     let input = $toJson(`yi`)
     let resp = staticExec("yexe", input=input, cache=input)
-    var `yo` : YexeOutput 
-    fromJson(`yo`, parseJson(resp))
+    var yo : YexeOutput
+    fromJson(yo, parseJson(resp))
+    if yo.hasError:
+      raise newException(Exception, "Error while calling yexe: " & yo.errMsg)
+    var `genPt` = parsingTableToNimNode(yo.pt)
 
-  # nimydebug is also a string -d param, use that for file path
-  when defined(nimydebug):
-    body.add quote do:
-      writeFile(debuginfo.nimydebug, `yo`.dctx.debugStr)
-  
-  # nimygraphviz is also a string -d param, use that for file path
-  when defined(nimygraphviz):
-    body.add quote do:
-      writeFile(debuginfo.nimygraphviz, `yo`.dctx.dotStr)
-
-  # actually generate the output as a const <parserName>* = ...
-  let genPt = genSym(nskVar)
-  let parName = newStrLitNode parserName.strVal
   # annoyingly can't nest quote do, the substitution for parserName would fail. 
   # as such, resort to using the nasty mix of quote do and ast node types. 
   # I tried genast but it was an even bigger mess and couldn't get it to work. 
   # whatever, as long as it works in the end. 
+  # actually generate the output as a const <parserName>* = ...
+  let parName = newStrLitNode parserName.strVal
   body.add quote do:
-    var `genPt` = parsingTableToNimNode(`yo`.pt)
     result = 
       nnkConstSection.newTree(
         nnkConstDef.newTree(
