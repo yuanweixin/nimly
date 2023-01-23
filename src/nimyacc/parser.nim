@@ -9,8 +9,7 @@ import debuginfo
 import options
 import dev_assert
 
-# TODO error reporting needs to be systematized
-# TODO would be nice to give user a way to handle parser error, but would need to research on how that even works.
+# TODO would be nice to give user a way to handle parser error, but need more research
 
 proc `$`*(i: ActionTableItem): string =
   match i:
@@ -46,32 +45,32 @@ proc pop(parser: var Parser): parsetypes.State =
 proc top(parser: Parser): parsetypes.State =
   return parser.stack[parser.stack.high]
 
-proc nextChar[LS,T](lexer: var NimlLexer[LS,T], token: var T, symbol: var Symbol, charsRead: var int) =
-  try:
-    token = lexer.lexNext
-    symbol = TermS(ord(token.kind))
-    inc charsRead
-  except NimlEOFError:
+template nextChar() {.dirty.} = 
+  token = lexer.lexNext
+  case token.kind 
+  of Jammed:
+    return ErrorNode[T]()
+  of Eof:
     symbol = End()
-  except:
-    raise 
+  of Token:
+    symbol = TermS(ord(token.token.kind))
+    inc tokenCount 
 
 proc parseImpl*[LS,T](parser: var Parser,
                       lexer: var NimlLexer[LS,T]): ParseTree[T] =
   var 
     tree: seq[ParseTree[T]] = @[]
-    token: T
+    token: LexerOutput[T]
     symbol: Symbol
     prevErrPos = 0 
     minShiftsToReportError = 0 
-    charsRead = 0 
-
-  lexer.nextChar(token, symbol, charsRead)
+    tokenCount = 0 
+  nextChar()
 
   while true:
     when defined(nimytrace):
-      echo "\nparser stack:" & $parser.stack
-      echo "read token:" & $symbol
+      echo "\nparser stack:", parser.stack
+      echo "read token: ", token
     var action: ActionTableItem
     
     if symbol notin parser.table.action[parser.top]:
@@ -80,14 +79,16 @@ proc parseImpl*[LS,T](parser: var Parser,
       action = parser.table.action[parser.top][symbol]
     
     when defined(nimytrace):
-      echo "action: " & $action
+      echo "action: ", action
 
     case action.kind
     of ActionTableItemKind.Shift:
       dec minShiftsToReportError
       let s = action.state
-      tree.add(Terminal[T](token))
-      lexer.nextChar(token, symbol, charsRead)
+      tree.add(Terminal[T](token.token))
+      when defined(nimytrace):
+        echo "Shifted ", token
+      nextChar()
       parser.push(s)
     of ActionTableItemKind.Reduce:
       let r = action.rule
@@ -106,11 +107,22 @@ proc parseImpl*[LS,T](parser: var Parser,
       nimyaccAssert tree.len == 1, "Error, parsing result is wrong."
       return NonTerminal[T](rule = Rule(), tree =tree)
     of ActionTableItemKind.Error:
+      parser.hasError = true 
+      # are we out of luck (tokens)? 
+      if symbol == End():
+        parser.onEof(lexer.input, tokenCount)
+        # we will just return ErrorNode as the parse tree. 
+        return ErrorNode[T]()
+
       if minShiftsToReportError <= 0:
-        parser.onError(charsRead)
-        discard
+        when defined(nimydevel):
+          echo "Parser stack: ", parser.stack
+          echo "Last token read: ", token
+        doAssert token.kind == Token, "Impl bug"
+        parser.onError(lexer.input, token.startPos, token.endPosExcl)
+
       minShiftsToReportError = 3 
-      if charsRead == prevErrPos:
+      if tokenCount == prevErrPos:
         # infinite loop detection: for the case when there is 
         # no possible action for the lookahead token we would 
         # be stuck. discarding tokens might help, so we will 
@@ -118,16 +130,10 @@ proc parseImpl*[LS,T](parser: var Parser,
         # any shift/reduce action puts something on the stack,
         # and accept would have returned. 
         when defined(nimytrace):
-          echo "likely infinite loop detected, same read position in input as previous error, no progress made since last shift of error symbol. discarding the lookahead=", $symbol, " to make progress"
-        lexer.nextChar(token, symbol, charsRead)
-      prevErrPos = charsRead
+          echo "likely infinite loop detected, same read position in input as previous error, no progress made since last shift of error symbol. discarding the lookahead=", symbol, " to make progress"
+        nextChar()
+      prevErrPos = tokenCount
 
-      parser.hasError = true 
-      # are we out of luck (tokens)? 
-      if symbol == End():
-        parser.onEof(charsRead)
-        # we will just return ErrorNode as the parse tree. 
-        return ErrorNode[T]()
       let errSym = ErrorS()
 
       # pop the stack until we reach state in which the 
@@ -137,9 +143,9 @@ proc parseImpl*[LS,T](parser: var Parser,
       while parser.stack.len > 1 and (errSym notin parser.table.action[parser.top] or parser.table.action[parser.top][errSym].kind != ActionTableItemKind.Shift):
         when defined(nimytrace):
           if errSym notin parser.table.action[parser.top]:
-            echo "no action for error symbol. discarding stack.top=" & $parser.top()
+            echo "no action for error symbol. discarding stack.top=", parser.top()
           else:
-            echo "action for error symbol is not Shift but is " & $parser.table.action[parser.top][errSym] & ". discarding stack.top=" & $parser.top()
+            echo "action for error symbol is not Shift but is ", parser.table.action[parser.top][errSym], ". discarding stack.top=", parser.top()
         discard parser.pop()
         discard tree.pop()
 
@@ -160,10 +166,10 @@ proc parseImpl*[LS,T](parser: var Parser,
             (symbol notin parser.table.action[parser.top] or 
               parser.table.action[parser.top][symbol].kind == ActionTableItemKind.Error):
               when defined(nimytrace):
-                echo "discarding lookahead=" & $token
-              lexer.nextChar(token, symbol, charsRead)
+                echo "discarding lookahead=", token
+              nextChar()
           if symbol == End(): # ran out of symbols
-            parser.onEof(charsRead)
+            parser.onEof(lexer.input, tokenCount)
             return ErrorNode[T]()
           # either shift some sync token or reduce a rule containing error symbol. 
           # the assumption is we should consume at least 1 lookahead after this. 
@@ -173,20 +179,40 @@ proc parseImpl*[LS,T](parser: var Parser,
       # we can eventually parse something. more sane to bail at this point. 
       return ErrorNode[T]()
         
-
 proc init*(p: var Parser) =
   # annoyingly, "reset" is a built-in proc that sets something to its default state,
   # so we can't name this proc "reset" because if we do the system.reset get called
   # and bad things happen. will keep calling this "init". 
   p.stack = @[0]
 
-proc defaultOnError(pos: int) = 
-  echo "Syntax error detected at input position ", pos
+func findContext(input:string, startPos, endPosExcl: int) : string = 
+  var nspaces = 0
+  for i in countdown(startPos-1, 0):
+    if input[i] in NewLines:
+      for j in countup(i+1,startpos-1):
+        result.add input[j]
+      nspaces = startpos - (i+1)
+      break 
+  
+  for i in countup(startPos,input.len-1):
+    if input[i] notin NewLines: # assume a token can't contain newlines.
+      result.add input[i]
+      continue
+    result.add "\n"
+    break 
+  
+  if nspaces > 0:
+    result.add spaces(nspaces)
+    result.add "^"
 
-proc defaultOnEof(pos: int) = 
-  echo "Unexpected eof detected at input position ", pos
+proc defaultOnError(input: string, startPos, endPosExcl: int) = 
+  echo "Syntax error detected at startPos=", startPos, " endPosExcl=", endPosExcl
+  echo "Context:\n", findContext(input, startPos, endPosExcl)
 
-proc newParser*(t: ParsingTable, onError: proc (pos: int) = defaultOnError, onEof: proc (pos:int) = defaultOnEof): Parser =
+proc defaultOnEof(input: string, pos: int) = 
+  echo "Unexpected eof detected"
+
+proc newParser*(t: ParsingTable, onError: proc (i: string, s,e: int) = defaultOnError, onEof: proc (i:string, p:int) = defaultOnEof): Parser =
   result = Parser(stack: @[0], table: t, provisionalToksCnt: 0, hasError:false, onError: onError, onEof: onEof)
   result.init()
 

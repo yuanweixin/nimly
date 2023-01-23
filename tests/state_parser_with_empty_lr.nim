@@ -1,7 +1,7 @@
 import patty
 import nimyacc
 import strutils
-
+import common
 variantp StateToken:
   SPLUS
   SMULTI
@@ -16,7 +16,7 @@ variantp StateToken:
   STHEN
   SIGNORE
 
-genStringMatcher testStateLex[int,StateToken]:
+genStringMatcher testStateLex[LexerState,StateToken]:
   r"\+":
     yield SPLUS()
   r"\*":

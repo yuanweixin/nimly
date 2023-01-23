@@ -87,8 +87,6 @@ proc toLALRKernel(lrKernel: SetOfLRItems, g: Grammar,
 
   # init collection and cal propagate
   for idx, itms in lrKernel:
-    when defined(nimydebug):
-      echo "converting kernel: " & $(idx + 1) & "/" & $lrKernel.len
     for itm in itms:
       if not (propagation.haskey(itm)):
         propagation[itm] = initHashSet[(int, LRItem)]()
@@ -119,42 +117,29 @@ proc toLALRKernel(lrKernel: SetOfLRItems, g: Grammar,
           newSet.incl(new)
     checkSet = newSet
 
-proc makeTableLALR*(g: Grammar): ParsingTable =
+proc makeTableLALR*(g: Grammar, dctx: var DebugContext): ParsingTable =
   var
     actionTable: ActionTable
     gotoTable: GotoTable
   actionTable = initTable[State, ActionRow]()
   gotoTable = initTable[State, GotoRow]()
-  when defined(nimydebug):
-    echo "start: make table for parser"
   let
     ag = if g.isAugment:
            g
          else:
            g.augment
-  when defined(nimydebug):
-    echo "start: makeCanonicalCollection"
   let 
     (cc, tt) = makeCanonicalCollection(ag)
     knl = cc.filterKernel
-  when defined(nimydebug):
-    echo "start: toLALRKernel"
   let lalrKnl = knl.toLALRKernel(ag, tt)
   var cntSR = 0 
   var cntRR = 0 
   for idx, itms in lalrKnl:
-    when defined(nimydebug):
-      echo "processing: Collection " & $(idx + 1) & "/" & $lalrKnl.len
     actionTable[idx] = initTable[Symbol, ActionTableItem]()
     gotoTable[idx] = initTable[Symbol, State]()
-    when defined(nimydebug):
-      echo "processing: Collection " & $(idx + 1) & " - make closure"
     let clsr = ag.closure(itms)
     var cnt = 1
     for itm in clsr:
-      when defined(nimydebug):
-        echo "processing: Collection " & $(idx + 1) & " - " &
-          $cnt & "/" & $clsr.card
       inc(cnt)
       let sym = itm.nextSkipEmpty
       match sym:
@@ -164,9 +149,9 @@ proc makeTableLALR*(g: Grammar): ParsingTable =
           if actionTable[idx].haskey(sym) and
               actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
             actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, tt[idx][sym])
-            when defined(nimyDebug):
-              echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym 
-              echo "Resolved in favor of " & $actionTable[idx][sym]
+            if dctx.doGenDebugString:
+              dctx.debugStr.add "LALR:Shift-Reduce CONFLICT!!!", idx, ":", sym 
+              dctx.debugStr.add "Resolved in favor of ", actionTable[idx][sym]
             inc cntSR 
           elif actionTable[idx].haskey(sym) and
               actionTable[idx][sym].kind == ActionTableItemKind.Error:
@@ -188,13 +173,14 @@ proc makeTableLALR*(g: Grammar): ParsingTable =
 
               actionTable[idx][itm.ahead] = resolveShiftReduceConflict(itm.rule, 
               itm.ahead.term, g, actionTable[idx][itm.ahead].state)
-              when defined(nimydebug):
-                echo "LALR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead
-                echo "Conflict resolved in favor of " & $actionTable[idx][itm.ahead]
+              if dctx.doGenDebugString:
+                dctx.debugStr.add "LALR:Shift-Reduce CONFLICT!!!", idx, ":", itm.ahead
+                dctx.debugStr.add "Conflict resolved in favor of ", actionTable[idx][itm.ahead]
               inc cntSR 
             elif actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Reduce: 
-              echo "LALR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $itm.ahead & ".  This usually indicates a serious error in the grammar. It could also be due to the LALR table compression, where multiple reducible rules are placed into the same parser state and there is insufficient context to distinguish them. A possible solution is to add a bogus token to one of the rules to force it into a distinct parser state. Another possible solution is to rewrite the grammar rules to reduce ambiguity." 
+              if dctx.doGenDebugString:
+                dctx.debugStr.add "LALR:Reduce-Reduce CONFLICT!!!", idx, ":", itm.ahead, ".  This usually indicates a serious error in the grammar. It could also be due to the LALR table compression, where multiple reducible rules are placed into the same parser state and there is insufficient context to distinguish them. A possible solution is to add a bogus token to one of the rules to force it into a distinct parser state. Another possible solution is to rewrite the grammar rules to reduce ambiguity." 
               inc cntRR
               continue
             elif actionTable[idx].haskey(itm.ahead) and
@@ -205,29 +191,27 @@ proc makeTableLALR*(g: Grammar): ParsingTable =
         _:
           discard
 
-  when defined(nimydebug):
-    echo "\n\nDone making LALR tables"
-    echo "Debug info:"
-    echo $g
-    echo $cntSR & " shift-reduce conflict(s)"
-    echo $cntRR & " reduce-reduce conflict(s)"
-    echo "=============================="
-    echo "LALR automaton"
+  if dctx.doGenDebugString:
+    dctx.debugStr.add $g
+    dctx.debugStr.add cntSR, " shift-reduce conflict(s)"
+    dctx.debugStr.add cntRR, " reduce-reduce conflict(s)"
+    dctx.debugStr.add "=============================="
+    dctx.debugStr.add "LALR automaton"
     for idx, itms in lalrKnl:
-      echo "state " & $idx 
+      dctx.debugStr.add "state ", idx 
       var clj = ag.closure(itms)
-      echo lalrItemsToString(clj, g, actionTable, gotoTable, idx)
-      echo "=============================="
-    echo actionTable 
-    echo gotoTable
+      dctx.debugStr.add lalrItemsToString(clj, g, actionTable, gotoTable, idx)
+      dctx.debugStr.add "=============================="
+    dctx.debugStr.add actionTable 
+    dctx.debugStr.add gotoTable
 
-  when defined(nimygraphviz):
+  if dctx.doGenGraphViz:
     var dg = emptyDotGraph()
-    # repeat closure calculation in nimydebug...
+    # repeat the closure calculation that we done above. 
     # oh well. 
     for idx, itms in lalrKnl:
       var clj = ag.closure(itms)
       populateDotGraph(dg, clj, g, actionTable, gotoTable, idx)
-    echo dg.render    
+    dctx.dotStr.add dg.render    
 
   result = ParsingTable(action: actionTable, goto: gotoTable)

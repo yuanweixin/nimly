@@ -4,6 +4,11 @@ import options
 import tables
 import sets
 
+const
+  nimydebug* {.strdefine.} = ""
+  nimygraphviz* {.strdefine.} = ""
+
+
 type RuleIdx = int 
 
 const errorState : State = -1 
@@ -12,6 +17,18 @@ const reduceNodeColor = "1"
 const acceptNodeColor = "3"
 const errorNodeColor = "5"
 
+type DebugContext* = object
+  doGenDebugString* : bool
+  doGenGraphViz* : bool  
+  dotStr* : string 
+  debugStr* : string 
+
+proc add*(s: var string, itms: varargs[string, `$`]) = 
+  ## this terminates with a newline. 
+  for i in itms:
+    s.add i
+  s.add "\n"
+
 proc `$`*(s: SetOfLRItems): string =
   result = "CanonicalCollection:\n--------\n"
   for i, itms in s:
@@ -19,6 +36,7 @@ proc `$`*(s: SetOfLRItems): string =
   result = result & "--------\n"
 
 func findRuleIdx(g: Grammar, r: Rule) : State = 
+  #TODO deprecate me and use the index already embedded
   for i,ru in g.rules:
     if r==ru:
       return i 

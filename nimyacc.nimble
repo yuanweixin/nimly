@@ -16,7 +16,7 @@ import ospaths
 
 proc buildHelper(name: string) =
   if not fileExists(name.toExe):
-    exec "nim c " & name
+    exec "nim c -d:release --mm:orc " & name
 
 task make, "builds yexe":
   buildHelper "yexe"

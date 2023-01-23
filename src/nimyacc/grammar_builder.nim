@@ -6,13 +6,9 @@ type GrammarBuilder* = object
     rules: OrderedSet[Rule]
     start: Symbol
     precAssoc: Table[int,(Precedence, Associativity)]
-    parserType : ParserType
 
 func newGrammarBuilder*(start: Symbol) : GrammarBuilder = 
     result.start = start 
-
-func setParserType*(gb: var GrammarBuilder, parserType: ParserType) = 
-    gb.parserType = parserType
 
 func validateLeft(left: Symbol) = 
     doAssert left.kind == SymbolKind.NonTermS, "Left side of rule must be Non-Terminal Symbol."
@@ -28,6 +24,14 @@ func validateRight(rs: varargs[Symbol]) =
 func addRule*(gb: var GrammarBuilder,  r: Rule) = 
     doAssert r notin gb.rules, "Duplicate rule in grammar: " & $r
     gb.rules.incl r
+
+func addRule*(gb: var GrammarBuilder,  left: Symbol, right: Symbol) = 
+    let r = Rule(left: left, right: @[right], prec: none[Precedence](), index: 0)
+    gb.addRule r
+
+func addRule*(gb: var GrammarBuilder,  left: Symbol, right: varargs[Symbol]) = 
+    let r = Rule(left: left, right: right.toSeq, prec: none[Precedence](), index: 0)
+    gb.addRule r 
 
 func addRule*(gb: var GrammarBuilder,  prec: Option[Precedence], left: Symbol, right: Symbol) = 
     let r = Rule(left: left, right: @[right], prec: prec, index: 0)
@@ -53,6 +57,5 @@ func toGrammar*(gb: var GrammarBuilder) : Grammar =
         rules.add Rule(left: r.left, right: r.right, prec: r.prec, index: curIdx)
         inc curIdx
     result = Grammar(rules: rules, start: start, precAssoc: gb.precAssoc)
-    result.parserType = gb.parserType
     result.firstTable = result.makeFirstTable
     result.followTable = result.makeFollowTable

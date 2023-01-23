@@ -3,6 +3,7 @@ import patty
 import strutils
 import options
 import nimyacc
+import common
 
 ## variant is defined in patty
 variant MyToken:
@@ -14,7 +15,7 @@ variant MyToken:
   RPAREN
   IGNORE
 
-genStringMatcher testLex[int,MyToken]:
+genStringMatcher testLex[LexerState,MyToken]:
   r"\(":
     yield LPAREN()
   r"\)":
@@ -66,42 +67,48 @@ nimy testPar[MyToken]:
         result &= $(tkn.val)
 
 test "test Lexer":
-  var testLexer = testLex.newWithString(42, "1 + 42 * 101010")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "1 + 42 * 101010")
   var
     ret: seq[MyTokenKind] = @[]
 
-  for token in testLexer.lexIter:
-    ret.add(token.kind)
-
+  while not testLexer.isEmpty():
+    ret.add testLexer.lexNext().token.kind
+    
   check ret == @[MyTokenKind.NUM, MyTokenKind.PLUS, MyTokenKind.NUM,
                  MyTokenKind.NUM, MyTokenKind.MULTI,
                  MyTokenKind.NUM, MyTokenKind.NUM, MyTokenKind.NUM,
                  MyTokenKind.NUM, MyTokenKind.NUM, MyTokenKind.NUM]
 
 test "test Parser 1":
-  var testLexer = testLex.newWithString(42, "1 + 42 * 101010")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "1 + 42 * 101010")
 
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "1 + [42 * 101010]"
 
-  testLexer = testLex.newWithString(42, "1 + 42 * 1010")
+  testLexer = testLex.newWithString(s, "1 + 42 * 1010")
 
   parser.init()
   check parser.parse_testPar(testLexer) == some "1 + [42 * 1010]"
 
 test "test Parser 2":
-  var testLexer = testLex.newWithString(42, "1 + 42 * 1.01010")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "1 + 42 * 1.01010")
 
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "1 + [42 * 1.01010]"
 
-  testLexer = testLex.newWithString(42, "1. + 4.2 * 101010")
+  testLexer = testLex.newWithString(s, "1. + 4.2 * 101010")
 
   parser.init()
   check parser.parse_testPar(testLexer) == some "1. + [4.2 * 101010]"
 
 test "test Parser 3":
-  var testLexer = testLex.newWithString(42, "(1 + 42) * 1.01010")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "(1 + 42) * 1.01010")
 
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "[(1 + 42) * 1.01010]"
+
+

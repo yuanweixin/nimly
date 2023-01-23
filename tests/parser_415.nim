@@ -1,5 +1,6 @@
 import patty
 import nimyacc
+import common
 
 variantp MyTerm:
   EQ
@@ -7,7 +8,7 @@ variantp MyTerm:
   ID(val: string)
   IGNORE
 
-genStringMatcher lex415[int,MyTerm]:
+genStringMatcher lex415[LexerState,MyTerm]:
   r"=":
     yield EQ()
   r"\*":

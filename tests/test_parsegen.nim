@@ -3,6 +3,7 @@ import patty
 import strutils
 import options
 import nimyacc
+import common
 
 type
   MyTokenKind{.pure.} = enum
@@ -26,7 +27,7 @@ proc NUM(num: int): MyToken =
 proc IGNORE(): MyToken =
   return MyToken(kind: MyTokenKind.IGNORE)
 
-genStringMatcher testLex[int, MyToken]:
+genStringMatcher testLex[LexerState, MyToken]:
   r"\+":
     yield PLUS()
   r"\*":
@@ -55,18 +56,20 @@ nimy testPar[MyToken]:
       return $(($1).val)
 
 test "test 1":
-  var testLexer = testLex.newWithString(42, "1 + 2 * 3")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "1 + 2 * 3")
   var
     ret: seq[MyTokenKind] = @[]
-  for token in testLexer.lexIter:
-    ret.add(token.kind)
+  while not testLexer.isEmpty():
+    ret.add testLexer.lexNext().token.kind
   check ret == @[MyTokenKind.NUM, MyTokenKind.PLUS, MyTokenKind.NUM,
                  MyTokenKind.MULTI, MyTokenKind.NUM]
 
 test "test 2":
-  var testLexer = testLex.newWithString(42, "1 + 2 * 3")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "1 + 2 * 3")
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "1 + (2 * 3)"
-  testLexer = testLex.newWithString(42, "1 + 2 * 3")
+  testLexer = testLex.newWithString(s, "1 + 2 * 3")
   parser.init()
   check parser.parse_testPar(testLexer) == some "1 + (2 * 3)"

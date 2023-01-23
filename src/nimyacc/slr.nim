@@ -78,8 +78,6 @@ proc makeCanonicalCollection*(g: Grammar): (SetOfLRItems,
                                                   TransTable) =
   # figure 4.33 of dragon book.                                          
   # seed C with the closure of start rule
-  when defined(nimydebug):
-    echo "taking closure of start rule"
   let init = g.closure([LRItem(ruleIdx: g.startRule.index, pos: 0, g: g)].toHashSet)
   var
     cc = [
@@ -88,18 +86,12 @@ proc makeCanonicalCollection*(g: Grammar): (SetOfLRItems,
     checkSet = cc
     tt: TransTable = @[]
   tt.add(initTransTableRow())
-  when defined(nimydebug):
-    var iter = 0 
   when defined(nimydevel):
     var gotoCallSavedCnt = 0
     var crossStateDupGotoCalls = 0
   while checkSet.len > 0:
     var new: SetOfLRItems
     # for each set of items I in C 
-    when defined(nimydebug):
-        echo "iteration " & $iter & " computing fixed point of collection."
-        echo "checkSet size is " & $checkset.len
-        inc iter 
     for itms in checkSet:
       let frm = cc.indexOf(itms) 
       nimyaccAssert itms == g.closure(itms)
@@ -142,7 +134,7 @@ proc makeCanonicalCollection*(g: Grammar): (SetOfLRItems,
   nimyaccAssert cc.indexOf(init) == 0, "init state is not '0'"
   result = (cc, tt)
 
-proc makeTableSLR*(g: Grammar): ParsingTable =
+proc makeTableSLR*(g: Grammar, dctx: var DebugContext): ParsingTable =
   ## This produces the SLR table. 
   var
     actionTable: ActionTable
@@ -174,9 +166,9 @@ proc makeTableSLR*(g: Grammar): ParsingTable =
           if actionTable[idx].haskey(sym) and
             actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
             actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, i)
-            when defined(nimydebug):
-              echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $sym
-              echo "Conflict resolved in favor of " &   $actionTable[idx][sym]
+            if dctx.doGenDebugString:
+              dctx.debugStr.add "SLR:Shift-Reduce CONFLICT!!!", idx, ":", sym
+              dctx.debugStr.add "Conflict resolved in favor of ", actionTable[idx][sym]
             inc cntSR 
           elif actionTable[idx].haskey(sym) and
             actionTable[idx][sym].kind == ActionTableItemKind.Error:
@@ -201,13 +193,14 @@ proc makeTableSLR*(g: Grammar): ParsingTable =
 
                 actionTable[idx][flw] = resolveShiftReduceConflict(item.rule, flw.term, g, actionTable[idx][flw].state)
 
-                when defined(nimydebug):
-                  echo "SLR:Shift-Reduce CONFLICT!!!" & $idx & ":" & $flw
-                  echo "Conflict resolved in favor of " & $actionTable[idx][flw]
+                if dctx.doGenDebugString:
+                  dctx.debugStr.add "SLR:Shift-Reduce CONFLICT!!!",idx, ":", flw
+                  dctx.debugStr.add "Conflict resolved in favor of ", actionTable[idx][flw]
                 inc cntSR 
               elif actionTable[idx].haskey(flw) and
                   actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
-                echo "SLR:Reduce-Reduce CONFLICT!!!" & $idx & ":" & $flw & ". This usually indicates a serious error in the grammar. Try unfactoring grammar to eliminate the conflict. As is, the first rule to get processed wins."
+                if dctx.doGenDebugString:
+                  dctx.debugStr.add "SLR:Reduce-Reduce CONFLICT!!!", idx, ":", flw, ". This usually indicates a serious error in the grammar. Try unfactoring grammar to eliminate the conflict. As is, the first rule to get processed wins."
                 inc cntRR
               elif actionTable[idx].haskey(sym) and
                 actionTable[idx][sym].kind == ActionTableItemKind.Error:
@@ -215,30 +208,26 @@ proc makeTableSLR*(g: Grammar): ParsingTable =
               else:
                 actionTable[idx][flw] = Reduce(item.rule)
         _:
-          when defined(nimydebug):
-            echo "SLR: OTHER (" & $sym & ")"
           discard
 
-  when defined(nimydebug):
-    echo "\n\nDone making SLR tables"
-    echo "Debug info:"
-    echo $g
-    echo $cntSR & " shift-reduce conflict(s)"
-    echo $cntRR & " reduce-reduce conflict(s)"
-    echo "=============================="
-    echo "SLR automaton"
+  if dctx.doGenDebugString:
+    dctx.debugStr.add g
+    dctx.debugStr.add cntSR, " shift-reduce conflict(s)"
+    dctx.debugStr.add cntRR, " reduce-reduce conflict(s)"
+    dctx.debugStr.add "=============================="
+    dctx.debugStr.add "SLR automaton"
     for idx, itms in canonicalCollection:
-      echo "state " & $idx 
-      echo lrItemsToString(itms, g, actionTable, gotoTable, idx)
-      echo "=============================="
-    echo actionTable
-    echo gotoTable
+      dctx.debugStr.add "state ", idx 
+      dctx.debugStr.add lrItemsToString(itms, g, actionTable, gotoTable, idx)
+      dctx.debugStr.add "=============================="
+    dctx.debugStr.add actionTable
+    dctx.debugStr.add gotoTable
 
-  when defined(nimygraphviz):
+  if dctx.doGenGraphViz:
     var dg = emptyDotGraph()
     for idx, itms in canonicalCollection:
       populateDotGraph(dg, itms, g, actionTable, gotoTable, idx)
-    echo dg.render()
+    dctx.dotStr = dg.render()
 
   result = ParsingTable(action: actionTable, goto: gotoTable)
 

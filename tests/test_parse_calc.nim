@@ -4,6 +4,7 @@ import strutils
 
 import nimyacc
 import options
+import common
 
 variant MyToken:
   PLUS
@@ -11,7 +12,7 @@ variant MyToken:
   NUM(val: int)
   IGNORE
 
-genStringMatcher testLex[int,MyToken]:
+genStringMatcher testLex[LexerState,MyToken]:
   r"\+":
     yield PLUS()
   r"\*":
@@ -40,15 +41,17 @@ nimy testPar[MyToken]:
       return ($1).val
 
 test "lexer":
-  var testLexer = testLex.newWithString(42, "1 + 2 * 3")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "1 + 2 * 3")
   var
     ret: seq[MyTokenKind] = @[]
-  for token in testLexer.lexIter:
-    ret.add(token.kind)
+  while not testLexer.isEmpty():
+    ret.add testLexer.lexNext().token.kind
   check ret == @[MyTokenKind.NUM, MyTokenKind.PLUS, MyTokenKind.NUM,
                  MyTokenKind.MULTI, MyTokenKind.NUM]
 
 test "parsing":
-  var testLexer = testLex.newWithString(42, "1 + 2 * 3")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "1 + 2 * 3")
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some "7"

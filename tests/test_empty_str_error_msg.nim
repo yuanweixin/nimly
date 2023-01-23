@@ -3,12 +3,13 @@ import strutils
 import patty
 import nimyacc
 import options
+import common
 
 variant Token:
   CHARS(val: string)
   IGNORE
 
-genStringMatcher testLex[int,Token]:
+genStringMatcher testLex[LexerState,Token]:
   r"\w+":
     yield CHARS(input.substr(oldpos, pos-1))
   r"\s":
@@ -23,12 +24,14 @@ nimy testPar[Token]:
       return ($1).val
 
 test "parser works":
-  var testLexer = testLex.newWithString(42, "This is a test")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "This is a test")
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some @["This", "is", "a", "test"]
 
 test "empty string":
-  var testLexer = testLex.newWithString(42, "")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "")
   var parser = testPar.newParser()
   let actual = parser.parse_testPar(testLexer)
   check parser.hasError

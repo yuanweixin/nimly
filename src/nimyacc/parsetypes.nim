@@ -108,8 +108,8 @@ type
     table*: ParsingTable
     provisionalToksCnt*: int 
     hasError*: bool
-    onError*: proc (pos: int) {.closure.}
-    onEof*: proc (pos: int) {.closure.}
+    onError*: proc (input:string, startPos: int, endPosExcl: int) {.closure.}
+    onEof*: proc (input:string, pos: int) {.closure.}
 
 variantp ParseTree[T]:
   Terminal(token: T)

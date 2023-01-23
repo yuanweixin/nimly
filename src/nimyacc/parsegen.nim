@@ -8,6 +8,8 @@ import parser
 import fusion/matching
 import grammar_builder
 import std/jsonutils, json
+import yexe
+import debuginfo
 
 type
   PTProc[T, R] = proc(nimyacctree: ParseTree[T]): R {.nimcall.}
@@ -241,6 +243,62 @@ proc replaceBody(body, param: NimNode,
         result = body
   result = replaceImpl(body)
 
+func symbolToNimNode(s: Symbol) : NimNode = 
+  case s.kind 
+  of SymbolKind.TermS:
+    let i = s.term
+    result = quote do:
+      TermS(`i`)
+  of SymbolKind.NonTermS:
+    let nt = s.nonterm
+    result = quote do:
+      NonTermS(`nt`)
+  of SymbolKind.Dummy:
+    result = quote do:
+      Dummy()
+  of SymbolKind.End:
+    result = quote do:
+      End()
+  of SymbolKind.Empty:
+    result = quote do:
+      Empty()
+  of SymbolKind.ErrorS:
+    result = quote do:
+      ErrorS()
+
+func ruleToNimNode(rule: Rule) : NimNode = 
+  let left = symbolToNimNode(rule.left)
+  var right : seq[NimNode]
+  for r in rule.right:
+    right.add symbolToNimNode(r)
+  let prec = 
+    if rule.prec.isSome:
+      let p = rule.prec.get
+      quote do:
+        some[Precedence](`p`)
+    else:
+      quote do:
+        none[Precedence]()    
+  result = quote do:
+    Rule(left: `left`, right: `right`.toSeq, prec: `prec`)
+
+func actionTableItemToNimNode(ati: ActionTableItem) : NimNode = 
+  case ati.kind
+  of ActionTableItemKind.Shift:
+    let s = ati.state
+    result = quote do:
+      Shift(`s`)
+  of ActionTableItemKind.Reduce:
+    let rn = ruleToNimNode(ati.rule)
+    result = quote do:
+      Reduce(`rn`)
+  of ActionTableItemKind.Accept:
+    result = quote do:
+      Accept()
+  of ActionTableItemKind.Error:
+    result = quote do:
+      Error()
+
 proc makeRuleProc(name, body, rTy, tokenType, tokenKind: NimNode,
                   types: seq[string], nimyInfo: NimyInfo, pt=false): NimNode =
   let
@@ -256,17 +314,72 @@ proc makeRuleProc(name, body, rTy, tokenType, tokenKind: NimNode,
   else:
     result = newProc(name, params)
 
-proc tableMakerProc(tokenType, tokenKind, topNonTerm: NimNode,
+proc parsingTableToNimNode(pt: ParsingTable) : NimNode = 
+  # returns body of a block that
+  # declares ParsingTable var
+  # populates it
+  # has the var as the last line of the body 
+  result = newStmtList()
+  let ptvar = genSym(nskVar)
+  result.add quote do:
+    var `ptvar` : ParsingTable
+  for src, actionrow in pt.action.pairs():
+    let srcNode = newIntLitNode src
+    result.add quote do:
+      `ptvar`.action[`srcNode`] = initTable[Symbol,ActionTableItem]()
+    for sym, ati in actionrow.pairs():
+      let symNode = sym.symbolToNimNode
+      let atiNode = ati.actionTableItemToNimNode
+      result.add quote do:
+        `ptvar`.action[`srcNode`][`symNode`] = `atiNode`
+  for src, gotorow in pt.goto.pairs():
+    let srcNode = newIntLitNode src
+    result.add quote do:
+      `ptvar`.goto[`srcNode`] = initTable[Symbol,int]()
+    for sym,dst in gotorow.pairs():
+      let dstNode = newIntLitNode dst
+      let symNode = sym.symbolToNimNode
+      result.add quote do:
+        `ptvar`.goto[`srcNode`][`symNode`] = `dstNode`
+  result.add quote do:
+    `ptvar`
+
+proc tableMakerProc(parserName, tokenType, tokenKind, topNonTerm: NimNode,
                     rules, syms: seq[NimNode], precedence: var Table[string,(Precedence, Associativity)], parserType: NimNode): NimNode = 
+  ## Probably the most messy and ugly part of this codegen. 
+  ## This generates a macro that calls yexe using staticExec and generates a const <parserName>* ParsingTable.
+  ## The macro is then invoked in the generated code to generate the ParsingTable. 
+  ## 
+  ## Why call yexe? Because nim vm is slow af and complains the parsing table generation takes too many iterations. 
+  ## On slightly larger grammars (e.g. for the toy language tiger) it craps out even when you up the max iterations 
+  ## to max value. It is comically weak and pathetic. The vm will kill itself after it runs out of iterations. Otoh, 
+  ## the same computation invoked on a normal exe would complete in less than a second for that input. Idk what the 
+  ## core team was thinking to let you do metaprogramming only to make the vm so goddamn slow and useless for slightly
+  ## bigger computations.
+  ## 
+  ## Calling yexe means, we can't just print debug info or dot output to stdout anymore and need to write it to a file. 
+  ## Which is fine, but it means yexe needs to collect that output as a string, and either yexe output it to file or 
+  ## we output it to file here. The choice was made to do the file write here. 
+  ## 
+  ## The reason we need a nested macro instead of just directly manipulating Grammar objects is because need to use 
+  ## parseEnum[T]("somestr").ord to convert the terminal from string to int. 
+  ## 
+  ## I am not aware of any way to do the above directly in a macro at compile time. But you can do it in a nested macro 
+  ## by substituting some nimnode for T and then invoking the nested macro. Since macro expansion is recursive until it's 
+  ## fully expanded, that means eventually you get the code you want. 
+  ## 
+  ## Templates are useless for this even though they can take generic params because anything we write in the template 
+  ## will substitute into the generated code which is not what we want. 
+  ## 
+  ## The annoying thing about this, besides the madness of nesting, is that calling toStrLit on the result of top level
+  ## macro, before the top level macro returns, won't expand the generated code all the way. It will show you the generated
+  ## macro and its call. However, if a user does it on the top level macro call it will show you the value of the 
+  ## ParsingTable, which isn't terribly interesting to look at anyway because it's just a giant table dump.
   var body = nnkStmtList.newTree()
-  body.add quote do:
-    when defined(nimydebug):
-      echo "START: making the Parser"
   let
     builderId = genSym(nskVar)
   body.add quote do:
     var `builderId` = newGrammarBuilder(`topNonTerm`)
-    `builderId`.setParserType(ParserType.`parserType`)
   for rule in rules:
     body.add quote do:
       `builderId`.addRule(`rule`)
@@ -277,20 +390,64 @@ proc tableMakerProc(tokenType, tokenKind, topNonTerm: NimNode,
         try:
           `builderId`.addPrecAssoc(parseEnum[`tokenKind`](`tok`).ord, `prec`, Associativity(`assoc`))
         except:
-          when defined(nimydevel):
-            echo "ignoring fake token kind ", `tok`, " for prec/assoc considerations in grammar construction"
-          discard 
-  
+          echo "ignoring fake token kind ", `tok`, " for prec/assoc considerations in grammar construction"
+  let yi = genSym(nskVar)
+  let yo = genSym(nskVar)
   body.add quote do:
-    let input = $toJson(`builderId`.toGrammar())
+    var `yi` : YexeInput
+    `yi`.g = `builderId`.toGrammar()
+    `yi`.parserType = ParserType.`parserType`
+  
+  when defined(nimydebug):
+    body.add quote do:
+      `yi`.dctx.doGenDebugString = true
+  when defined(nimygraphviz):
+    body.add quote do:
+      `yi`.dctx.doGenGraphViz = true 
+  body.add quote do:
+    let input = $toJson(`yi`)
     let resp = staticExec("yexe", input=input, cache=input)
-    var pt : ParsingTable
-    let x = parseJson(resp)
-    fromJson(pt, x)
-    pt
-  result = quote do:
-    `body`
+    var `yo` : YexeOutput 
+    fromJson(`yo`, parseJson(resp))
 
+  # nimydebug is also a string -d param, use that for file path
+  when defined(nimydebug):
+    body.add quote do:
+      writeFile(debuginfo.nimydebug, `yo`.dctx.debugStr)
+  
+  # nimygraphviz is also a string -d param, use that for file path
+  when defined(nimygraphviz):
+    body.add quote do:
+      writeFile(debuginfo.nimygraphviz, `yo`.dctx.dotStr)
+
+  # actually generate the output as a const <parserName>* = ...
+  let genPt = genSym(nskVar)
+  let parName = newStrLitNode parserName.strVal
+  # annoyingly can't nest quote do, the substitution for parserName would fail. 
+  # as such, resort to using the nasty mix of quote do and ast node types. 
+  # I tried genast but it was an even bigger mess and couldn't get it to work. 
+  # whatever, as long as it works in the end. 
+  body.add quote do:
+    var `genPt` = parsingTableToNimNode(`yo`.pt)
+    result = 
+      nnkConstSection.newTree(
+        nnkConstDef.newTree(
+          nnkPostfix.newTree(
+            newIdentNode("*"),
+            ident `parName`
+          ),
+          newEmptyNode(),
+          `genPt`
+        )
+      )
+
+  let makeTable = genSym(nskMacro)
+
+  result = quote do:
+    macro `makeTable`() : untyped = 
+      `body`
+    `makeTable`()
+    
 proc getOpt(sym, ty, nt: NimNode): NimNode =
   # for input:
   # sym=DOT, ty=MyToken, nt=__opt_DOT
@@ -847,11 +1004,11 @@ macro nimy*(head, body: untyped): untyped =
     )
   )
 
-  let tableMakerBlock = tableMakerProc(tokenType, tokenKind, topNonTermNode,
+  let tableMakerBlock = tableMakerProc(parserName, tokenType, tokenKind, topNonTermNode,
                    ruleIds[1..^1], symNodes, precedence, parserType)
   result.add quote do:
-    const `parserName`* = static:
-      `tableMakerBlock`
+    `tableMakerBlock`
+    
 
   # add proc parse
   let procName = ident("parse_" & parserName.strVal)

@@ -4,6 +4,7 @@ import strutils
 import macros
 import math
 import nimyacc
+import common
 
 ## variant is defined in patty
 variant MyToken:
@@ -14,7 +15,7 @@ variant MyToken:
   SEMI
   IGNORE
   
-genStringMatcher testLex[int, MyToken]:
+genStringMatcher testLex[LexerState, MyToken]:
   r"\(":
     yield LPAREN()
   r"\)":
@@ -72,22 +73,25 @@ nimy infiniteLoop[MyToken]:
       return 1 
 
 test "appel book example":
+  var s: LexerState
   # from modern compiler implementation in ML p.76
-  var testLexer = testLex.newWithString(42, ")ID")
+  var testLexer = testLex.newWithString(s, ")ID")
   var parser = testPar.newParser()
   discard parser.parse_testPar(testLexer) 
   check parser.hasError
 
 test "infinite loop does not occur":
-  var testLexer = testLex.newWithString(42, ")ID")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, ")ID")
   var parser = infiniteLoop.newParser()
   discard parser.parse_infiniteLoop(testLexer) 
   check parser.hasError
 
 test "2 errors at least 3 shifts apart, both get reported":
-  var testLexer = testLex.newWithString(42, "(+) + (+) + ID")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "(+) + (+) + ID")
   var cnt = 0
-  proc onError(pos: int) = 
+  proc onError(input: string, s,p: int) = 
     inc cnt
   var parser = testPar.newParser(onError)
   discard parser.parse_testPar(testLexer) 
@@ -95,7 +99,8 @@ test "2 errors at least 3 shifts apart, both get reported":
   check parser.hasError
 
 test "2 errors within 3 shifts, only 1 is reported":
-  var testLexer = testLex.newWithString(42, "(+) + +) + ID")
+  var s : LexerState
+  var testLexer = testLex.newWithString(s, "(+) + +) + ID")
   # stack, lookahead, action
   # 0, (, shift
   # 0 (, +, error! 
@@ -116,7 +121,7 @@ test "2 errors within 3 shifts, only 1 is reported":
   # 
   # there's only 2 shifts between the first and second error, so only 1 call to onError happens
   var cnt = 0
-  proc onError(pos: int) = 
+  proc onError(input: string, s,p: int) = 
     inc cnt
   var parser = testPar.newParser(onError)
   discard parser.parse_testPar(testLexer) 

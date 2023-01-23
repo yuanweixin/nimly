@@ -5,6 +5,7 @@ import macros
 import math
 import nimyacc
 import options
+import common
 
 ## variant is defined in patty
 variant MyToken:
@@ -19,7 +20,7 @@ variant MyToken:
   IGNORE
   EXPON
 
-genStringMatcher testLex[int,MyToken]:
+genStringMatcher testLex[LexerState, MyToken]:
   r"\(":
     yield LPAREN()
   r"\)":
@@ -62,8 +63,9 @@ nimy testPar[MyToken, SLR]:
       return -($2)
 
 proc calculate(str: string) : Option[int] = 
-  var
-    lexer = testLex.newWithString(42, str)
+  var s: LexerState
+  var 
+    lexer = testLex.newWithString(s, str)
     parser = testPar.newParser()
   return parser.parse_testPar(lexer)
 

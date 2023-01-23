@@ -1,13 +1,13 @@
 import unittest
 import patty
-
 import nimyacc
 import options
+import common
 
 variant Token:
   CHARS(val: string)
 
-genStringMatcher testLex[int, Token]:
+genStringMatcher testLex[LexerState, Token]:
   r"\w+":
     yield CHARS(input.substr(oldPos, pos-1))
   r"\s":
@@ -23,11 +23,13 @@ nimy testPar[Token]:
 
 
 test "parser works":
-  var testLexer = testLex.newWithString(42, "This is a test")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "This is a test")
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer) == some @["This", "is", "a", "test"]
 
 test "empty string does not cause error":
-  var testLexer = testLex.newWithString(42, "")
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "")
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer).get.len == 0

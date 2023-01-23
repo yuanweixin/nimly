@@ -3,8 +3,9 @@ import patty
 
 import nimyacc
 import options
+import common
 
-genStringMatcher testLex[int,string]:
+genStringMatcher testLex[LexerState,string]:
   r"if":
     yield input.substr(oldpos, pos-1)
   r"else":
@@ -13,43 +14,52 @@ genStringMatcher testLex[int,string]:
     discard 
 
 test "sanity":
+  var s: LexerState
   var iter = testLex("""if
 else if
 else""")
-  var state = 42
   var actual : seq[string]
-  for x in iter(state):
+  for x in iter(s):
     actual.add x
   check @["if", "acc", "if", "acc"] == actual
 
-test "test macro niml (if/else)":
-  var testLexer = testLex.newWithString(42, """if
-else if
-else""")
-  var ret: seq[string] = @[]
-  for s in testLexer.lexIter():
-    ret.add(s)
-  check ret == @["if", "acc", "if", "acc"]
-
-test "is empty":
-  var testLexer = testLex.newWithString(42, "")
-  check testLexer.isEmpty()
-
-test "calling lexNext on empty throws NimlEOFError":
-  var testLexer = testLex.newWithString(42, "")
-  check testLexer.isEmpty()
-  expect(NimlEOFError):
-    discard testLexer.lexNext()
-
-test "lexNext":
-  var testLexer = testLex.newWithString(42, """if
+test "test (if/else)":
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, """if
 else if
 else""")
   var ret: seq[string] = @[]
   while not testLexer.isEmpty():
-    ret.add testLexer.lexNext()
+    ret.add testLexer.lexNext().token
+  check ret == @["if", "acc", "if", "acc"]
+
+test "is empty":
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "")
+  check testLexer.isEmpty()
+
+test "is empty lexNext":
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "")
+  check testLexer.lexNext().kind == Eof
+
+test "normal usage":
+  var s : LexerState
+  var testLexer = testLex.newWithString(s, """if
+else if
+else""")
+  var ret: seq[string] = @[]
+  while not testLexer.isEmpty():
+    ret.add testLexer.lexNext().token
 
   check ret == @["if", "acc", "if", "acc"]
   check testLexer.isEmpty
-  expect(NimlEOFError):
-    discard testLexer.lexNext()
+  check testLexer.lexNext().kind == Eof
+
+test "jammed":
+  var s : LexerState
+  var testLexer = testLex.newWithString(s, "fffft")
+  check testLexer.lexNext().kind == Jammed
+  check testLexer.lexNext().kind == Jammed
+  check testLexer.lexNext().kind == Jammed
+  check testLexer.isEmpty()

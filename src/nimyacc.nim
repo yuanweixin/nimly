@@ -10,19 +10,21 @@ import tables
 import sets
 import nimyacc/grammar_builder
 import std/jsonutils, json
+import nimyacc/yexe
+import sequtils
+import macros
 
+export macros # this is not great, should eliminate
+export sequtils.toSeq
 export jsonutils
 export json
-export tables
-export sets
-export grammar_builder
-
+export tables 
+export sets 
+export grammar_builder 
+export yexe
 export lexer
-
 export lexim
-
-export debuginfo.`$`
-
+export debuginfo
 export parsetypes.NimyError
 export parsetypes.NimyActionError
 export parsetypes.NimyGotoError

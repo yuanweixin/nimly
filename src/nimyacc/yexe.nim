@@ -1,15 +1,26 @@
-import parsetypes, slr, lalr, std/jsonutils, json
+import parsetypes, debuginfo, slr, lalr, std/jsonutils, json
 
+type YexeInput* = object
+  g*: Grammar 
+  parserType*: ParserType 
+  dctx*: DebugContext
 
-proc main(input: string): string =
-  var g: Grammar
-  fromJson(g, parseJson(input))
-  let pt = 
-    case g.parserType 
+type YexeOutput* = object
+  pt*: ParsingTable
+  dctx*: DebugContext
+
+proc main(input:string) : string = 
+  var i: YexeInput
+  fromJson(i, parseJson(input))
+  var o: YexeOutput
+  o.pt = 
+    case i.parserType 
     of Slr:
-      makeTableSLR(g)
+      makeTableSLR(i.g, i.dctx)
     of Lalr:
-      makeTableLALR(g)  
-  result = $pt.toJson()
+      makeTableLALR(i.g, i.dctx)
+  o.dctx = i.dctx
+  echo $o.toJson()
 
-echo main(readAll(stdin))
+when isMainModule:
+  echo main(readAll(stdin))
