@@ -298,3 +298,15 @@ Due to the limitations on loop iterations in the nim compiler vm (see maxLoopIte
 The json parsing of debug/dot string is apparently too expensive for the nim vm, so `yexe` is also responsible for outputting to the file paths in `-d:nimydebug=<debug_path>` and `-d:nimygraphviz=<dot_path>`. It does return error to the caller of `staticExec` so error message surfaces as an unhandled exception during compile time. See `parsegen.nim` for details. 
 
 If you are not modifying yexe, then it should already be installed for you when you install nimyacc, and should not cause issues. 
+
+[parsetypes.nim](src/nimyacc/parsetypes.nim) contains most of the type definitions, as well as the logic to compute FIRST and FOLLOW. 
+
+[slr.nim](src/nimyacc/slr.nim) contains logic to compute the canonical collection. 
+
+[lalr.nim](src/nimyacc/lalr.nim) contains logic to compute the lookahead propagation. 
+
+[parsegen.nim](src/nimyacc/parsegen.nim) contains the logic to handle the dsl, call yexe, and do codegen. 
+
+[debuginfo.nim](src/nimyacc/debuginfo.nim) contains logic to generate a debug or dot string from the parser automaton. 
+
+[parser.nim](src/nimyacc/parser.nim) contains the parser engine loop. The error recovery mechanism is also in there. 
