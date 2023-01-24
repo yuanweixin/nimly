@@ -37,7 +37,7 @@ The core algorithms (first/follow sets, canonical collection, lookahead propagat
 
 Add to .nimble file 
 ```
-requires "https://github.com/yuanweixin/dotted >= 1.0.0"
+requires "https://github.com/yuanweixin/nimyacc >= 1.0.0"
 ```
 
 
