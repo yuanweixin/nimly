@@ -88,6 +88,11 @@ genStringMatcher testLex[LexerState,MyToken]:
   r"\s":
     discard
 ```
+The above generates a `testLex` proc, that can be used to create a lexer like this: 
+```nim
+  var s: LexerState
+  var lexer = testLex.newWithString(s, str)
+```
 
 ## parser usage 
 
@@ -100,8 +105,19 @@ nimy testPar[MyToken]: # generates parse_testPar proc.
     plus: # right hand side "plus"
       return $1 # user action. supports the $n references to the matches. n>=1. 
 ```
+In the above, `top` is the start symbol. It is always the first nonterminal that appears in the specification. 
 
-Note that the left hand side return type can have different types. Type mismatches in your code are caught. 
+This generates a `parse_testPar` procedure (using the `parse_` prefix) that can be invoked to return an Option[<retype>] where <retype> is the return type of the top level nonterminal. 
+```nim
+  var s: LexerState
+  var 
+    lexer = testLex.newWithString(s, str)
+    parser = testPar.newParser()
+  return parser.parse_testPar(lexer) 
+```
+If there is a parse error, then `parser.hasError` returns true. 
+
+Note that different left hand sides can have different return types. 
 ```nim
 nimy testPar[MyToken]:
   top[string]:
@@ -138,8 +154,53 @@ nimy testRep[MyToken]:
         inc cnt
       return cnt
 ```
+Specifying precedence of tokens. Note using a fake token to override rule level precendence is also supported (UMINUS in this example).
+```nim
+nimy testPar[MyToken, SLR]:
+  %left PLUS MINUS
+  %left MULTI DIV
+  %nonassoc EXPON
+  %nonassoc UMINUS
 
-## A complete example (tests/test_readme_example.nim)
+  exp[int]:
+    NUM:
+      return ($1).val
+    exp PLUS exp:
+      return $1 + $3
+    exp MINUS exp:
+      return $1 - $3
+    exp MULTI exp:
+      return $1 * $3
+    exp DIV exp:
+      return $1 div $3
+    exp EXPON exp:
+      return int(math.pow(float64($1), float64($3)))
+    MINUS exp %prec UMINUS:
+      return -($2)
+```
+Here's an example of the use of the error symbol for error recovery. See [test case](tests/test_error_symbol.nim). 
+```nim
+nimy testPar[MyToken]:
+  exps[int]:
+    exp:
+      return 1 
+    exps exp:
+      return 1 
+    error exp:
+      return 1 
+    
+  exp[int]:
+    ID: 
+      return 1 
+    exp PLUS exp:
+      return 1 
+    LPAREN exps RPAREN:
+      return 1 
+    LPAREN error RPAREN: 
+      return 1 
+```
+
+## A complete example [test case](tests/test_readme_example.nim)
 
 ```nim
 import nimyacc 
