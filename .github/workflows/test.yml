@@ -23,4 +23,5 @@ jobs:
       # which breaks for lexim due to the use of the new 
       # taskRequires feature in nimble 0.14. so stupid. 
       - run: nimble install nimble -y
+      - run: nimble install
       - run: nimble test -y

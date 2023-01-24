@@ -8,7 +8,7 @@ import dev_assert
 import sequtils
 
 type
-  NimyError* = object of Exception
+  NimyError* = object of CatchableError
   NimyActionError* = object of NimyError
   NimyGotoError* = object of NimyError
 

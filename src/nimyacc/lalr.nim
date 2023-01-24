@@ -5,10 +5,8 @@ import hashes
 import patty
 
 import parsetypes
-import parser
 import slr
 import options
-import strutils
 import debuginfo
 import dotted
 import dev_assert

@@ -1,5 +1,4 @@
 import unittest
-import patty
 import strutils
 import options
 import nimyacc

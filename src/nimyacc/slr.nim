@@ -1,11 +1,7 @@
 import tables
-import hashes
 import sets
-
 import patty
-
 import parsetypes
-import parser
 import options
 import debuginfo
 import dotted

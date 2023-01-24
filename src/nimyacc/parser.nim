@@ -1,8 +1,6 @@
 import tables
 import strutils
 
-import patty
-
 import lexer
 import parsetypes
 import debuginfo
