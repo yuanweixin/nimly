@@ -93,6 +93,16 @@ The above generates a `testLex` proc, that can be used to create a lexer like th
   var s: LexerState
   var lexer = testLex.newWithString(s, str)
 ```
+You don't really need to call the lexer's procs directly. The typical usage is to just pass it to a parser later. But if you need to you can pull out the individual tokens. Note the example below is for the NimlLexer defined in [lexer.nim](src/nimyacc/lexer.nim), which uses the lexim api under the hood. 
+```nim
+  var s: LexerState
+  var testLexer = testLex.newWithString(s, "some input string")
+  while not testLexer.isEmpty():
+    discard testLexer.lexNext()
+```
+`lexNext` returns a `LexerOutput` type which is a case object that can be of kind `Jammed`, `Token`, or `Eof` for lexical error, valid token, and end of file, respectively. 
+
+If already at `Eof` or `Jammed`, future calls to `lexNext` will return `Eof` or `Jammed`, respectively. `isEmpty()` will return false. 
 
 ## parser usage 
 
