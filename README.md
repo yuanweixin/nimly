@@ -15,7 +15,7 @@ The core algorithms (first/follow sets, canonical collection, lookahead propagat
 * Error recovery using error symbol, similar to bison. This is the ad hoc error recovery using error token, as described in Modern Compiler Implementation in ML, p.76. I believe this is similar to what yacc/bison does. For another description of the algorithm, see the [python yacc clone PLY documentation](https://www.dabeaz.com/ply/ply.html#ply_nn29). 
 * Use [lexim](https://github.com/yuanweixin/lexim) which is a high performance scanner library that implements the dfa directly as a jump table, eliminating the overhead of table lookups. It supports lexer states for ease of handling common constructs such as comments and strings.  
 
-# Possible future extensions
+## Possible future extensions
 * Add more grammars as examples.
 * Local error recovery strategies that does not require any change to grammar. 
   
@@ -31,12 +31,17 @@ The core algorithms (first/follow sets, canonical collection, lookahead propagat
 
 * Counterexample generation to debug grammar development 
 
-  See [bison doc](https://www.gnu.org/software/bison/manual/html_node/Counterexamples.html) for a description of the feature. 
+  See [bison doc](https://www.gnu.org/software/bison/manual/html_node/Counterexamples.html) for a description of the feature.
 
-Usage
-====
+## Installing
 
-## Overview
+Add to .nimble file 
+```
+requires "https://github.com/yuanweixin/dotted >= 1.0.0"
+```
+
+
+## Usage Overview
 
 The examples assume use of the [patty]() lib to create the case object types. 
 
@@ -55,7 +60,7 @@ Use of `patty` is optional. However, the parser generator does expect a  _naming
 
 Namely, if you case object is called `MyToken`, then the "kind" parameter must be `MyTokenKind`. In other words, it uses <TokName> & "Kind". 
 
-## lexer specification
+## lexer usage 
 
 You need to define an object type that have these fields: `startPos`, `endPosExcl`, like so: 
 ```nim
@@ -84,7 +89,7 @@ genStringMatcher testLex[LexerState,MyToken]:
     discard
 ```
 
-## parser specification
+## parser usage 
 
 macro `nimy` generates the parsing table and the code to invoke the parser, at compile time. The generated code simply creates a proc that, when called, invokes the parser engine on the given input, and use the parser table to derive the parse tree. The parse tree is then traversed post-order. During the traversal, the user-specified code blocks are run. 
 
@@ -134,7 +139,7 @@ nimy testRep[MyToken]:
       return cnt
 ```
 
-### A complete example (tests/test_readme_example.nim)
+## A complete example (tests/test_readme_example.nim)
 
 ```nim
 import nimyacc 
@@ -215,8 +220,8 @@ test "test Lexer":
                  MyTokenKind.NUM, MyTokenKind.NUM, MyTokenKind.NUM]
 ```
 
-Install
-=======
+## Development
 
-`nimble install https://github.com/yuanweixin/nimyacc`
+Due to the limitations on loop iterations in the nim compiler vm (see maxLoopIterationsVM flag in the [nim compiler user guide](https://nim-lang.org/docs/nimc.html) for more info), parser table generation is offloaded to a separate executable `yexe` (otherwise the vm runs out of iterations and kills itself, plus it runs orders of magnitude slower than if logic is in a separate executable). `staticExec` to yexe is done in the `nimy` macro. If you make changes to `yexe` you need to run `dev_nimble_install.sh` to update the local version. 
 
+The json parsing of debug/dot string is apparently too expensive for the nim vm, so `yexe` is also responsible for outputting to the file paths in `-d:nimydebug=<debug_path>` and `-d:nimygraphviz=<dot_path>`. It does return error to the caller of `staticExec` so error message surfaces as an unhandled exception during compile time. See `parsegen.nim` for details. 
