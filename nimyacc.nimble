@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.9.0"
+version       = "1.0.0"
 author        = "Wei Xin Yuan"
 description   = "Parser generator macro library"
 license       = "MIT"
