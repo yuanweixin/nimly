@@ -19,6 +19,7 @@ genStringMatcher lexer2[LexerState, MyToken]:
 
 test "test [^...] in regex":
   var s : LexerState
+  
   var testLexer = lexer1.newWithString(s, "xxx<<1")
   var ret: seq[LexerOutput[MyToken]] = @[]
   while not testLexer.isEmpty():

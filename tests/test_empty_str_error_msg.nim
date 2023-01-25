@@ -15,7 +15,7 @@ genStringMatcher testLex[LexerState,Token]:
   r"\s":
     discard
 
-nimy testPar[Token]:
+nimy testPar[Token, UserActionState]:
   top[seq[string]]:
     word word{}:
       return @[$1] & $2
@@ -25,14 +25,17 @@ nimy testPar[Token]:
 
 test "parser works":
   var s: LexerState
+  var uas: UserActionState
+
   var testLexer = testLex.newWithString(s, "This is a test")
   var parser = testPar.newParser()
-  check parser.parse_testPar(testLexer) == some @["This", "is", "a", "test"]
+  check parser.parse_testPar(testLexer,uas) == some @["This", "is", "a", "test"]
 
 test "empty string":
+  var uas: UserActionState
   var s: LexerState
   var testLexer = testLex.newWithString(s, "")
   var parser = testPar.newParser()
-  let actual = parser.parse_testPar(testLexer)
+  let actual = parser.parse_testPar(testLexer,uas)
   check parser.hasError
   check actual.isNone

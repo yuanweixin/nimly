@@ -13,7 +13,7 @@ genStringMatcher testLex[LexerState, Token]:
   r"\s":
     discard
 
-nimy testPar[Token]:
+nimy testPar[Token, UserActionState]:
   top[seq[string]]:
     word{}:
       return $1
@@ -24,12 +24,15 @@ nimy testPar[Token]:
 
 test "parser works":
   var s: LexerState
+  var uas: UserActionState
   var testLexer = testLex.newWithString(s, "This is a test")
   var parser = testPar.newParser()
-  check parser.parse_testPar(testLexer) == some @["This", "is", "a", "test"]
+  check parser.parse_testPar(testLexer, uas) == some @["This", "is", "a", "test"]
 
 test "empty string does not cause error":
   var s: LexerState
+  var uas: UserActionState
+
   var testLexer = testLex.newWithString(s, "")
   var parser = testPar.newParser()
-  check parser.parse_testPar(testLexer).get.len == 0
+  check parser.parse_testPar(testLexer, uas).get.len == 0

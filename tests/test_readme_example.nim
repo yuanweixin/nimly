@@ -31,7 +31,7 @@ genStringMatcher testLex[LexerState,MyToken]:
   r"\s":
     discard
 
-nimy testPar[MyToken]:
+nimy testPar[MyToken, UserActionState]:
   top[string]:
     plus:
       return $1
@@ -82,33 +82,36 @@ test "test Lexer":
 
 test "test Parser 1":
   var s: LexerState
+  var uas: UserActionState
   var testLexer = testLex.newWithString(s, "1 + 42 * 101010")
 
   var parser = testPar.newParser()
-  check parser.parse_testPar(testLexer) == some "1 + [42 * 101010]"
+  check parser.parse_testPar(testLexer, uas) == some "1 + [42 * 101010]"
 
   testLexer = testLex.newWithString(s, "1 + 42 * 1010")
 
   parser.init()
-  check parser.parse_testPar(testLexer) == some "1 + [42 * 1010]"
+  check parser.parse_testPar(testLexer, uas) == some "1 + [42 * 1010]"
 
 test "test Parser 2":
   var s: LexerState
+  var uas: UserActionState
   var testLexer = testLex.newWithString(s, "1 + 42 * 1.01010")
 
   var parser = testPar.newParser()
-  check parser.parse_testPar(testLexer) == some "1 + [42 * 1.01010]"
+  check parser.parse_testPar(testLexer, uas) == some "1 + [42 * 1.01010]"
 
   testLexer = testLex.newWithString(s, "1. + 4.2 * 101010")
 
   parser.init()
-  check parser.parse_testPar(testLexer) == some "1. + [4.2 * 101010]"
+  check parser.parse_testPar(testLexer, uas) == some "1. + [4.2 * 101010]"
 
 test "test Parser 3":
   var s: LexerState
+  var uas: UserActionState
   var testLexer = testLex.newWithString(s, "(1 + 42) * 1.01010")
 
   var parser = testPar.newParser()
-  check parser.parse_testPar(testLexer) == some "[(1 + 42) * 1.01010]"
+  check parser.parse_testPar(testLexer, uas) == some "[(1 + 42) * 1.01010]"
 
 

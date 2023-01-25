@@ -25,6 +25,7 @@ genStringMatcher testLex[LexerState,MyToken]:
 nimy testPar[MyToken, UserActionState]:
   top[string]:
     plus:
+      uastate.dummy = $1
       return $($1)
   plus[int]:
     plus PLUS plus:
@@ -40,20 +41,11 @@ nimy testPar[MyToken, UserActionState]:
     NUM:
       return ($1).val
 
-test "lexer":
-  var s: LexerState
-  var testLexer = testLex.newWithString(s, "1 + 2 * 3")
-  var
-    ret: seq[MyTokenKind] = @[]
-  while not testLexer.isEmpty():
-    ret.add testLexer.lexNext().token.kind
-  check ret == @[MyTokenKind.NUM, MyTokenKind.PLUS, MyTokenKind.NUM,
-                 MyTokenKind.MULTI, MyTokenKind.NUM]
-
-test "parsing":
+test "use user action state as counter":
   var s: LexerState
   var uas: UserActionState
 
   var testLexer = testLex.newWithString(s, "1 + 2 * 3")
   var parser = testPar.newParser()
   check parser.parse_testPar(testLexer,uas) == some "7"
+  check uas.dummy == 7

@@ -29,7 +29,7 @@ genStringMatcher testLex[LexerState, MyToken]:
   r"\s":
     discard
 
-nimy testPar[MyToken]:
+nimy testPar[MyToken, UserActionSTate]:
   exps[int]:
     exp:
       return 1 
@@ -51,7 +51,7 @@ nimy testPar[MyToken]:
     # because the lookahead token is never actually shifted
       return 1 
 
-nimy infiniteLoop[MyToken]:
+nimy infiniteLoop[MyToken, UserActionState]:
   exps[int]:
     exp:
       return 1 
@@ -74,32 +74,40 @@ nimy infiniteLoop[MyToken]:
 
 test "appel book example":
   var s: LexerState
+  var uas: UserActionState
+
   # from modern compiler implementation in ML p.76
   var testLexer = testLex.newWithString(s, ")ID")
   var parser = testPar.newParser()
-  discard parser.parse_testPar(testLexer) 
+  discard parser.parse_testPar(testLexer,uas) 
   check parser.hasError
 
 test "infinite loop does not occur":
   var s: LexerState
+  var uas: UserActionState
+
   var testLexer = testLex.newWithString(s, ")ID")
   var parser = infiniteLoop.newParser()
-  discard parser.parse_infiniteLoop(testLexer) 
+  discard parser.parse_infiniteLoop(testLexer,uas)
   check parser.hasError
 
 test "2 errors at least 3 shifts apart, both get reported":
   var s: LexerState
+  var uas: UserActionState
+
   var testLexer = testLex.newWithString(s, "(+) + (+) + ID")
   var cnt = 0
   proc onError(input: string, s,p: int) = 
     inc cnt
   var parser = testPar.newParser(onError)
-  discard parser.parse_testPar(testLexer) 
+  discard parser.parse_testPar(testLexer,uas)
   check cnt == 2
   check parser.hasError
 
 test "2 errors within 3 shifts, only 1 is reported":
   var s : LexerState
+  var uas: UserActionState
+
   var testLexer = testLex.newWithString(s, "(+) + +) + ID")
   # stack, lookahead, action
   # 0, (, shift
@@ -124,6 +132,6 @@ test "2 errors within 3 shifts, only 1 is reported":
   proc onError(input: string, s,p: int) = 
     inc cnt
   var parser = testPar.newParser(onError)
-  discard parser.parse_testPar(testLexer) 
+  discard parser.parse_testPar(testLexer,uas)
   check parser.hasError
   check cnt == 1

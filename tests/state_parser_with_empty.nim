@@ -43,7 +43,7 @@ genStringMatcher testStateLex[LexerState,StateToken]:
   r"\s":
     discard
 
-nimy testStatePar[StateToken]:
+nimy testStatePar[StateToken, UserActionState]:
   top[string]:
     state:
       return $1

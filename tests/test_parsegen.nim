@@ -36,7 +36,7 @@ genStringMatcher testLex[LexerState, MyToken]:
   r"\s":
     discard
 
-nimy testPar[MyToken]:
+nimy testPar[MyToken, UserActionState]:
   top[string]:
     plus:
       return $1
@@ -66,9 +66,11 @@ test "test 1":
 
 test "test 2":
   var s: LexerState
+  var uas: UserActionState
+
   var testLexer = testLex.newWithString(s, "1 + 2 * 3")
   var parser = testPar.newParser()
-  check parser.parse_testPar(testLexer) == some "1 + (2 * 3)"
+  check parser.parse_testPar(testLexer, uas) == some "1 + (2 * 3)"
   testLexer = testLex.newWithString(s, "1 + 2 * 3")
   parser.init()
-  check parser.parse_testPar(testLexer) == some "1 + (2 * 3)"
+  check parser.parse_testPar(testLexer, uas) == some "1 + (2 * 3)"

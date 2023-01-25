@@ -3,3 +3,6 @@ type LexerState* = object
     endPosExcl*: int # needed for lexim
     strBody*: string
     commentDepth*: int
+
+type UserActionState* = object 
+    dummy*: int

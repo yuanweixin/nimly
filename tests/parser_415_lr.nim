@@ -1,8 +1,9 @@
 import patty
 import nimyacc
 import parser_415
+import common 
 
-nimy psr415LR[MyTerm, SLR]:
+nimy psr415LR[MyTerm, UserActionState, SLR]:
   start[string]:
     left EQ right:
       return $1 & "=" & $3

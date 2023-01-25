@@ -12,8 +12,8 @@ import yexe
 import debuginfo
 
 type
-  PTProc[T, R] = proc(nimyacctree: ParseTree[T]): R {.nimcall.}
-  RuleToProc*[T, R] = Table[Rule, PTProc[T, R]]
+  PTProc[T, UAS, R] = proc(state: var UAS, nimyacctree: ParseTree[T]): R {.nimcall.}
+  RuleToProc*[T, UAS, R] = Table[Rule, PTProc[T, UAS, R]] # T = tree type, UAS = user action state type, R = return type 
   NimyKind = enum
     NonTerm
     Term
@@ -58,12 +58,12 @@ proc isTerm(s: string, nimyInfo: NimyInfo): bool =
 proc initNimyInfo(): NimyInfo =
   return initTable[string, NimyRow]()
 
-proc initRuleToProc*[T, R](): RuleToProc[T, R] =
-  return initTable[Rule, PTProc[T, R]]()
+proc initRuleToProc*[T, UAS, R](): RuleToProc[T, UAS, R] =
+  return initTable[Rule, PTProc[T, UAS, R]]()
 
-proc initRuleToProcNode(tokenType, returnType: NimNode): NimNode =
+proc initRuleToProcNode(tokenType, userActionStateType, returnType: NimNode): NimNode =
   result = quote do:
-    result = initRuleToProc[`tokenType`, `returnType`]()
+    result = initRuleToProc[`tokenType`, `userActionStateType`, `returnType`]()
 
 proc failwith(reasons: varargs[string, `$`]) = 
   var msg = ""
@@ -220,7 +220,7 @@ proc parseLeft(clause: NimNode): (string, NimNode) =
 proc isSpecialVar(n: NimNode): bool =
   return n.matches(Prefix([Ident(strVal: "$"), IntLit()]))
 
-proc replaceBody(body, param: NimNode,
+proc replaceBody(body, userActionStateParam, treeparam: NimNode,
                  types: seq[string], nimyInfo: NimyInfo): NimNode =
   proc replaceImpl(body: NimNode): NimNode =
     if body.isSpecialVar:
@@ -228,12 +228,12 @@ proc replaceBody(body, param: NimNode,
       # term
       if types[index] == "":
         result = quote do:
-          `param`.tree[`index`].token
+          `treeparam`.tree[`index`].token
       # nonterm
       else:
         let ruleToProc = nimyInfo[types[index]].ruleToProc
         result = quote do:
-          `ruleToProc`[`param`.tree[`index`].rule](`param`.tree[`index`])
+          `ruleToProc`[`treeparam`.tree[`index`].rule](`userActionStateParam`, `treeparam`.tree[`index`])
     else:
       if body.len > 0:
         result = newTree(body.kind)
@@ -299,17 +299,26 @@ func actionTableItemToNimNode(ati: ActionTableItem) : NimNode =
     result = quote do:
       Error()
 
-proc makeRuleProc(name, body, rTy, tokenType, tokenKind: NimNode,
+proc makeRuleProc(userActionStateType, name, body, rTy, tokenType, tokenKind: NimNode,
                   types: seq[string], nimyInfo: NimyInfo, pt=false): NimNode =
   let
-    param = newIdentNode("nimyacctree")
+    treeparam = newIdentNode("nimyacctree")
+    userActionStateParam = newIdentNode("uastate")
     pTy =   nnkBracketExpr.newTree(newIdentNode("ParseTree"),
                                    tokenType)
-    params = @[rTy, nnkIdentDefs.newTree(param, pTy, newEmptyNode())]
+    params = @[rTy, 
+      nnkIdentDefs.newTree(
+        userActionStateParam, 
+        nnkVarTy.newTree(
+          userActionStateType,
+        ),
+        newEmptyNode()
+      ), 
+      nnkIdentDefs.newTree(treeparam, pTy, newEmptyNode())]
   var
     procBody: NimNode
   if not pt:
-    procBody = body.replaceBody(param, types, nimyInfo)
+    procBody = body.replaceBody(userActionStateParam, treeparam, types, nimyInfo)
     result = newProc(name, params, procBody)
   else:
     result = newProc(name, params)
@@ -617,17 +626,18 @@ proc getRep(sym, ty, nt, nnt: NimNode): seq[NimNode] =
   )
   result.add(new)
 
-func parseHead(head: NimNode) : (NimNode, NimNode, NimNode) = 
+func parseHead(head: NimNode) : (NimNode, NimNode, NimNode, NimNode) = 
+  ## outputs: parserName, tokenType, userActionStateType, parserType
   if head.matches(
-    BracketExpr([@parserName, @tokenType, (strVal : @parserType)]) | 
-    BracketExpr([@parserName, @tokenType])):
+    BracketExpr([@parserName, @tokenType, @userActionStateType, (strVal : @parserType)]) | 
+    BracketExpr([@parserName, @tokenType, @userActionStateType])):
     if parserType.get("LALR") == "LALR":
-      return (parserName, tokenType, ident("Lalr"))
+      return (parserName, tokenType, userActionStateType, ident("Lalr"))
     if parserType.get == "SLR":
-      return (parserName, tokenType, ident("Slr"))
+      return (parserName, tokenType, userActionStateType, ident("Slr"))
     failwith "I only understand {LALR, SLR} but got unsupport parser type ", parserType.get
   else:
-    failwith "I expected nimy <parserName>[<tokType>,[<parserType>]] but got ", repr head
+    failwith "I expected nimy <parserName>[<tokType>,<userActionStateType>,[<parserType>]] but got ", repr head
 
 func validRhsSymType(n: NimNode) : bool = 
   return n.matches(Ident() | BracketExpr([Ident()]) | CurlyExpr([Ident()]))
@@ -732,7 +742,7 @@ iterator precAssocToks(n: NimNode): string =
 
 macro nimy*(head, body: untyped): untyped =
   let 
-    (parserName, tokenType, parserType) = parseHead(head)
+    (parserName, tokenType, userActionStateType, parserType) = parseHead(head)
     tokenKind = ident(tokenType.strVal & "Kind")
   body.validateBody()
   
@@ -899,7 +909,7 @@ macro nimy*(head, body: untyped): untyped =
       (nonTerm, rType) = parseLeft(clause)
       ruleClauses = clause[1]
     var ruleToProcMakerBody = nnkStmtList.newTree(
-      initRuleToProcNode(tokenType, rType)
+      initRuleToProcNode(tokenType, userActionStateType, rType)
     )
 
     # read Rule
@@ -933,11 +943,11 @@ macro nimy*(head, body: untyped): untyped =
 
       # make proc and add to result
       ruleProcs.add(
-        makeRuleProc(ruleProcId, clauseBody, nimyInfo[nonTerm].retTyNode,
+        makeRuleProc(userActionStateType, ruleProcId, clauseBody, nimyInfo[nonTerm].retTyNode,
                      tokenType, tokenKind, argTypes, nimyInfo)
       )
       ruleProcPts.add(
-        makeRuleProc(ruleProcId, clauseBody, nimyInfo[nonTerm].retTyNode,
+        makeRuleProc(userActionStateType, ruleProcId, clauseBody, nimyInfo[nonTerm].retTyNode,
                      tokenType, tokenKind, argTypes, nimyInfo, true)
       )
 
@@ -958,6 +968,7 @@ macro nimy*(head, body: untyped): untyped =
         @[nnkBracketExpr.newTree(
           newIdentNode("RuleToProc"),
           tokenType,
+          userActionStateType,
           rType
         )],
         ruleToProcMakerBody
@@ -1010,11 +1021,11 @@ macro nimy*(head, body: untyped): untyped =
   # add proc parse
   let procName = ident("parse_" & parserName.strVal)
   result.add quote do:
-    proc `procName`*[LS,T](parser: var Parser; lexer: var NimlLexer[LS,T]): Option[`returnType`] = 
+    proc `procName`*[LS,UAS,T](parser: var Parser; lexer: var NimlLexer[LS,T], userActionState: var UAS): Option[`returnType`] = 
       let tree = parseImpl(parser, lexer)
       if parser.hasError:
         return none[`returnType`]()
-      return some `topProcId`(tree)
+      return some `topProcId`(userActionState, tree)
   
   when defined(nimydebug):
     echo toStrLit(result)

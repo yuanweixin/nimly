@@ -193,7 +193,7 @@ genStringMatcher testLex[LexerState, Token]:
         raise newException(Exception, "Unexpected character###" & input.substr(
                 oldPos, pos-1) & "### at [" & $oldPos & "," & $(pos-1) & "]")
 
-nimy testPar[Token]:
+nimy testPar[Token, UserActionState]:
     %nonassoc Eq Neq Lt Le Gt Ge 
     %left Plus Minus 
     %left Times Divide
@@ -344,17 +344,21 @@ nimy testPar[Token]:
 
 test "parses merge.tig":
     var state : LexerState
+    var uas: UserActionState
+
     let input = readFile("tests/merge.tig")
     var lexer = testLex.newWithString(state, input)
     var parser = testPar.newParser()
-    discard parser.parse_testPar(lexer)
+    discard parser.parse_testPar(lexer, uas)
     doAssert not parser.hasError
 
 
 test "parses queens.tig":
     var state : LexerState
+    var uas: UserActionState
+
     let input = readFile("tests/queens.tig")
     var lexer = testLex.newWithString(state, input)
     var parser = testPar.newParser()
-    discard parser.parse_testPar(lexer)
+    discard parser.parse_testPar(lexer, uas)
     doAssert not parser.hasError

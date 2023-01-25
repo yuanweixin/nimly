@@ -108,28 +108,45 @@ If already at `Eof` or `Jammed`, future calls to `lexNext` will return `Eof` or 
 
 macro `nimy` generates the parsing table and the code to invoke the parser, at compile time. The generated code simply creates a proc that, when called, invokes the parser engine on the given input, and use the parser table to derive the parse tree. The parse tree is then traversed post-order. During the traversal, the user-specified code blocks are run. 
 
+In an actual parser, you'd need to pass symbol table objects. In the examples below we will use a dummy one: 
+```nim
+type UserActionState = object
+  dummy: int
+```
+This is exposed to the user code blocks as `uastate`. 
+
 The dsl looks like this: 
 ```nim
-nimy testPar[MyToken]: # generates parse_testPar proc. 
+nimy testPar[MyToken, UserActionState]: # generates parse_testPar proc. 
   top[string]: # left hand side "top", returning a string. 
-    plus: # right hand side "plus"
+    NUM: # right hand side "plus"
       return $1 # user action. supports the $n references to the matches. n>=1. 
 ```
 In the above, `top` is the start symbol. It is always the first nonterminal that appears in the specification. 
 
-This generates a `parse_testPar` procedure (using the `parse_` prefix) that can be invoked to return an Option[<retype>] where <retype> is the return type of the top level nonterminal. 
+Also, note the `$n` syntax for retrieving the subtrees. n>=1. Note that this is implemented by pattern matching the nim ast for `Prefix([Ident(strVal: "$"), IntLit()])`, so $n usually needs to be surrounded by spaces or ($n), otherwise nim might confuse it as part of some other syntax. 
+
+The above example generats a `testPar` constant, which is of type `ParsingTable`. It can be used to construct a new parser using `newParser`. 
+
+The above example generates a `parse_testPar` procedure. It always adds the `parse_` prefix to the name (in this case `testPar`). The type is: 
+```
+proc parse_testPar[LexerState, UserActionState, Token](p: var Parser, l: NimlLexer[LexerState,Token], uas: var UserActionState) : Option[Token]
+```
+
+Snippet of using the generated `parse_testPar` routine in the example: 
 ```nim
   var s: LexerState
+  var uas: UserActionState
   var 
     lexer = testLex.newWithString(s, str)
     parser = testPar.newParser()
-  return parser.parse_testPar(lexer) 
+  return parser.parse_testPar(lexer, uas)
 ```
 If there is a parse error, then `parser.hasError` returns true. 
 
 Note that different left hand sides can have different return types. 
 ```nim
-nimy testPar[MyToken]:
+nimy testPar[MyToken, UserActionState]:
   top[string]:
     plus:
       return $($1) # plus returns an int, so we need to convert it to string
@@ -139,11 +156,11 @@ nimy testPar[MyToken]:
       return ($1).val # extract the int value of the NUM token.
 ```
 
-0 or 1 matches:
+Option: 0 or 1 matches:
 
 The type is `seq[xxx]` where `xxx` is type of `XXX`.
 ```nim
-nimy testOption[MyToken]:
+nimy testOption[MyToken, UserActionState]:
   num[int]:
     DOT{}:
       var cnt = 0
@@ -152,11 +169,11 @@ nimy testOption[MyToken]:
       return cnt
 ```
 
-0 or more matches:
+Repetition: 0 or more matches:
 
 The type is `seq[xxx]` where `xxx` is type of `XXX`.
 ```nim
-nimy testRep[MyToken]:
+nimy testRep[MyToken, UserActionState]:
   num[int]:
     DOT{}:
       var cnt = 0
@@ -166,7 +183,7 @@ nimy testRep[MyToken]:
 ```
 Specifying precedence of tokens. Note using a fake token to override rule level precendence is also supported (UMINUS in this example).
 ```nim
-nimy testPar[MyToken, SLR]:
+nimy testPar[MyToken, UserActionState, SLR]:
   %left PLUS MINUS
   %left MULTI DIV
   %nonassoc EXPON
@@ -190,7 +207,7 @@ nimy testPar[MyToken, SLR]:
 ```
 Here's an example of the use of the error symbol for error recovery. See [test case](tests/test_error_symbol.nim). 
 ```nim
-nimy testPar[MyToken]:
+nimy testPar[MyToken, UserActionState]:
   exps[int]:
     exp:
       return 1 
@@ -213,7 +230,12 @@ nimy testPar[MyToken]:
 ## A complete example [test case](tests/test_readme_example.nim)
 
 ```nim
-import nimyacc 
+import unittest
+import patty
+import strutils
+import options
+import nimyacc
+import common
 
 ## variant is defined in patty
 variant MyToken:
@@ -241,7 +263,7 @@ genStringMatcher testLex[LexerState,MyToken]:
   r"\s":
     discard
 
-nimy testPar[MyToken]:
+nimy testPar[MyToken, UserActionState]:
   top[string]:
     plus:
       return $1
@@ -289,6 +311,40 @@ test "test Lexer":
                  MyTokenKind.NUM, MyTokenKind.MULTI,
                  MyTokenKind.NUM, MyTokenKind.NUM, MyTokenKind.NUM,
                  MyTokenKind.NUM, MyTokenKind.NUM, MyTokenKind.NUM]
+
+test "test Parser 1":
+  var s: LexerState
+  var uas: UserActionState
+  var testLexer = testLex.newWithString(s, "1 + 42 * 101010")
+
+  var parser = testPar.newParser()
+  check parser.parse_testPar(testLexer, uas) == some "1 + [42 * 101010]"
+
+  testLexer = testLex.newWithString(s, "1 + 42 * 1010")
+
+  parser.init()
+  check parser.parse_testPar(testLexer, uas) == some "1 + [42 * 1010]"
+
+test "test Parser 2":
+  var s: LexerState
+  var uas: UserActionState
+  var testLexer = testLex.newWithString(s, "1 + 42 * 1.01010")
+
+  var parser = testPar.newParser()
+  check parser.parse_testPar(testLexer, uas) == some "1 + [42 * 1.01010]"
+
+  testLexer = testLex.newWithString(s, "1. + 4.2 * 101010")
+
+  parser.init()
+  check parser.parse_testPar(testLexer, uas) == some "1. + [4.2 * 101010]"
+
+test "test Parser 3":
+  var s: LexerState
+  var uas: UserActionState
+  var testLexer = testLex.newWithString(s, "(1 + 42) * 1.01010")
+
+  var parser = testPar.newParser()
+  check parser.parse_testPar(testLexer, uas) == some "[(1 + 42) * 1.01010]"
 ```
 
 ## Development

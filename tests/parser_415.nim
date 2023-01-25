@@ -18,7 +18,7 @@ genStringMatcher lex415[LexerState,MyTerm]:
   r"\s":
     discard
 
-nimy psr415LALR[MyTerm]:
+nimy psr415LALR[MyTerm, UserActionState]:
   start[string]:
     left EQ right:
       return $1 & "=" & $3

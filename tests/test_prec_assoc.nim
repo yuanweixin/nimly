@@ -40,7 +40,7 @@ genStringMatcher testLex[LexerState, MyToken]:
   r"\s":
     discard
   
-nimy testPar[MyToken, SLR]:
+nimy testPar[MyToken, UserActionState, SLR]:
   %left PLUS MINUS
   %left MULTI DIV
   %nonassoc EXPON
@@ -64,10 +64,11 @@ nimy testPar[MyToken, SLR]:
 
 proc calculate(str: string) : Option[int] = 
   var s: LexerState
+  var uas: UserActionState
   var 
     lexer = testLex.newWithString(s, str)
     parser = testPar.newParser()
-  return parser.parse_testPar(lexer)
+  return parser.parse_testPar(lexer, uas)
 
 test "nonassoc":
   check calculate("2^2^3") == none[int]()
