@@ -1,6 +1,6 @@
 # nimyacc
 
-## LALR, SLR generator macro library in Nim. 
+## nimyacc is a LALR parser generator 
 
 [![github\_workflow](https://github.com/yuanweixin/nimyacc/workflows/test/badge.svg)](https://github.com/yuanweixin/nimyacc/actions?query=workflow%3Atest)
 [![nimble](https://raw.githubusercontent.com/yglukhov/nimble-tag/master/nimble.png)](https://github.com/yglukhov/nimble-tag)
@@ -117,7 +117,16 @@ nimy testPar[MyToken]: # generates parse_testPar proc.
 ```
 In the above, `top` is the start symbol. It is always the first nonterminal that appears in the specification. 
 
-This generates a `parse_testPar` procedure (using the `parse_` prefix) that can be invoked to return an Option[<retype>] where <retype> is the return type of the top level nonterminal. 
+Also, note the `$n` syntax for retrieving the subtrees. n>=1. Note that this is implemented by pattern matching the nim ast for `Prefix([Ident(strVal: "$"), IntLit()])`, so $n usually needs to be surrounded by spaces or ($n), otherwise nim might confuse it as part of some other syntax. 
+
+The above example generates a `testPar` constant, which is of type `ParsingTable`. It can be used to construct a new parser using `newParser`. 
+
+The above example generates a `parse_testPar` procedure. It always adds the `parse_` prefix to the name (in this case `testPar`). The type is: 
+```
+proc parse_testPar[LexerState, Token](p: var Parser, l: NimlLexer[LexerState,Token]) : Option[Token]
+```
+Snippet of using the generated `parse_testPar` routine in the example: 
+
 ```nim
   var s: LexerState
   var 
@@ -166,7 +175,7 @@ nimy testRep[MyToken]:
 ```
 Specifying precedence of tokens. Note using a fake token to override rule level precendence is also supported (UMINUS in this example).
 ```nim
-nimy testPar[MyToken, SLR]:
+nimy testPar[MyToken]:
   %left PLUS MINUS
   %left MULTI DIV
   %nonassoc EXPON
@@ -301,11 +310,9 @@ If you are not modifying yexe, then it should already be installed for you when 
 
 [parsetypes.nim](src/nimyacc/parsetypes.nim) contains most of the type definitions, as well as the logic to compute FIRST and FOLLOW. 
 
-[slr.nim](src/nimyacc/slr.nim) contains logic to compute the canonical collection. 
-
 [lalr.nim](src/nimyacc/lalr.nim) contains logic to compute the lookahead propagation. 
 
-[parsegen.nim](src/nimyacc/parsegen.nim) contains the logic to handle the dsl, call yexe, and do codegen. 
+[parsegen.nim](src/nimyacc/parsegen.nim) contains the logic to handle the dsl, call yexe, and do codegen. When changing this logic, you can use -dnimydebug to trigger the printing of the generated code to iterate. Note that due to use of a generated macro, the printed code isn't the final expanded version. But if you want you can wrap the `nimy` macro in the `expandMacro` call and see the actual finally generated code (most of the lines should contain the ParsingTable object). 
 
 [debuginfo.nim](src/nimyacc/debuginfo.nim) contains logic to generate a debug or dot string from the parser automaton. 
 

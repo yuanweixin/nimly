@@ -50,11 +50,7 @@ type
     firstTable*: FirstTable
     followTable*: FollowTable
     precAssoc*: Table[int,(Precedence, Associativity)]
-    parserType* : ParserType # auxiliary so all info for codegen in 1 place
 
-  ParserType* = enum
-    Slr
-    Lalr 
   FollowTable* = Table[Symbol, HashSet[Symbol]]
   FirstTable* = Table[Symbol, HashSet[Symbol]]
 

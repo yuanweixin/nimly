@@ -40,7 +40,7 @@ genStringMatcher testLex[LexerState, MyToken]:
   r"\s":
     discard
   
-nimy testPar[MyToken, SLR]:
+nimy testPar[MyToken]:
   %left PLUS MINUS
   %left MULTI DIV
   %nonassoc EXPON

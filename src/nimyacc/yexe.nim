@@ -1,8 +1,7 @@
-import parsetypes, debuginfo, slr, lalr, std/jsonutils, json
+import parsetypes, debuginfo, lalr, std/jsonutils, json
 
 type YexeInput* = object
   g*: Grammar 
-  parserType*: ParserType 
   doGenDebugString* : bool
   debugPath* : string 
   dotPath* : string
@@ -21,12 +20,7 @@ proc main(input:string) : string =
     var dctx : DebugContext
     dctx.doGenDebugString = i.doGenDebugString
     dctx.doGenGraphViz = i.doGenGraphViz
-    res.pt = 
-      case i.parserType 
-      of Slr:
-        makeTableSLR(i.g, dctx)
-      of Lalr:
-        makeTableLALR(i.g, dctx)
+    res.pt = makeTableLALR(i.g, dctx)
     if i.doGenDebugString:
       writeFile(i.debugPath, dctx.debugStr)
     if i.doGenGraphViz:

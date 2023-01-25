@@ -345,7 +345,7 @@ proc parsingTableToNimNode(pt: ParsingTable) : NimNode =
     `ptvar`
 
 proc tableMakerProc(parserName, tokenType, tokenKind, topNonTerm: NimNode,
-                    rules, syms: seq[NimNode], precedence: var Table[string,(Precedence, Associativity)], parserType: NimNode): NimNode = 
+                    rules, syms: seq[NimNode], precedence: var Table[string,(Precedence, Associativity)]): NimNode = 
   ## Probably the most messy and ugly part of this codegen. 
   ## This generates a macro that calls yexe using staticExec and generates a const <parserName>* ParsingTable.
   ## The macro is then invoked in the generated code to generate the ParsingTable. 
@@ -395,7 +395,6 @@ proc tableMakerProc(parserName, tokenType, tokenKind, topNonTerm: NimNode,
   body.add quote do:
     var `yi` : YexeInput
     `yi`.g = `builderId`.toGrammar()
-    `yi`.parserType = ParserType.`parserType`
   
   when defined(nimydebug):
     let debugPath = debuginfo.nimydebug
@@ -617,17 +616,12 @@ proc getRep(sym, ty, nt, nnt: NimNode): seq[NimNode] =
   )
   result.add(new)
 
-func parseHead(head: NimNode) : (NimNode, NimNode, NimNode) = 
+func parseHead(head: NimNode) : (NimNode, NimNode) = 
   if head.matches(
-    BracketExpr([@parserName, @tokenType, (strVal : @parserType)]) | 
     BracketExpr([@parserName, @tokenType])):
-    if parserType.get("LALR") == "LALR":
-      return (parserName, tokenType, ident("Lalr"))
-    if parserType.get == "SLR":
-      return (parserName, tokenType, ident("Slr"))
-    failwith "I only understand {LALR, SLR} but got unsupport parser type ", parserType.get
+      return (parserName, tokenType)
   else:
-    failwith "I expected nimy <parserName>[<tokType>,[<parserType>]] but got ", repr head
+    failwith "I expected nimy <parserName>[<tokType>] but got ", repr head
 
 func validRhsSymType(n: NimNode) : bool = 
   return n.matches(Ident() | BracketExpr([Ident()]) | CurlyExpr([Ident()]))
@@ -732,7 +726,7 @@ iterator precAssocToks(n: NimNode): string =
 
 macro nimy*(head, body: untyped): untyped =
   let 
-    (parserName, tokenType, parserType) = parseHead(head)
+    (parserName, tokenType) = parseHead(head)
     tokenKind = ident(tokenType.strVal & "Kind")
   body.validateBody()
   
@@ -1002,7 +996,7 @@ macro nimy*(head, body: untyped): untyped =
   )
 
   let tableMakerBlock = tableMakerProc(parserName, tokenType, tokenKind, topNonTermNode,
-                   ruleIds[1..^1], symNodes, precedence, parserType)
+                   ruleIds[1..^1], symNodes, precedence)
   result.add quote do:
     `tableMakerBlock`
     

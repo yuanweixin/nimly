@@ -47,7 +47,6 @@ export parser.newParser
 export parser.init
 
 export slr.makeCanonicalCollection
-export slr.makeTableSLR
 export slr.filterKernel
 
 export lalr.makeTableLALR

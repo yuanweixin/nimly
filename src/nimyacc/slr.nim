@@ -3,8 +3,6 @@ import sets
 import patty
 import parsetypes
 import options
-import debuginfo
-import dotted
 import dev_assert
 
 proc initTransTableRow(): Table[Symbol, int] =
@@ -129,103 +127,6 @@ proc makeCanonicalCollection*(g: Grammar): (SetOfLRItems,
     echo "cross state duplicated goto calls: ", crossStateDupGotoCalls
   nimyaccAssert cc.indexOf(init) == 0, "init state is not '0'"
   result = (cc, tt)
-
-proc makeTableSLR*(g: Grammar, dctx: var DebugContext): ParsingTable =
-  ## This produces the SLR table. 
-  var
-    actionTable: ActionTable
-    gotoTable: GotoTable
-  actionTable = initTable[State, ActionRow]()
-  gotoTable = initTable[State, GotoRow]()
-  let
-    ag = if g.isAugment:
-           g
-         else:
-           g.augment
-    (canonicalCollection, _) = makeCanonicalCollection(ag)
-  var cntSR = 0 
-  var cntRR = 0 
-  for idx, itms in canonicalCollection:
-    actionTable[idx] = initTable[Symbol, ActionTableItem]()
-    gotoTable[idx] = initTable[Symbol, State]()
-    for item in itms:
-      let sym = item.nextSkipEmpty
-      match sym:
-        ErrorS:
-          let i = canonicalCollection.indexOf(ag.goto(itms, sym))
-          nimyaccAssert i > -1,"There is no 'items' which is equal to 'goto'"
-          actionTable[idx][sym] = Shift(i)
-        TermS: # shift terminals
-          let i = canonicalCollection.indexOf(ag.goto(itms, sym))
-          nimyaccAssert i > -1,"There is no 'items' which is equal to 'goto'"
-
-          if actionTable[idx].haskey(sym) and
-            actionTable[idx][sym].kind == ActionTableItemKind.Reduce:
-            actionTable[idx][sym] = resolveShiftReduceConflict(actionTable[idx][sym].rule, sym.term, g, i)
-            if dctx.doGenDebugString:
-              dctx.debugStr.add "SLR:Shift-Reduce CONFLICT!!!", idx, ":", sym
-              dctx.debugStr.add "Conflict resolved in favor of ", actionTable[idx][sym]
-            inc cntSR 
-          elif actionTable[idx].haskey(sym) and
-            actionTable[idx][sym].kind == ActionTableItemKind.Error:
-            continue
-          else:
-            actionTable[idx][sym] = Shift(i)
-        NonTermS: # goto nonterminals 
-          let i = canonicalCollection.indexOf(ag.goto(itms, sym))
-          nimyaccAssert i > -1, "There is no 'items' which is equal to 'goto'"
-          gotoTable[idx][sym] = i
-        End: # accept or reduce 
-          if item.rule.left == ag.start:
-            actionTable[idx][End()] = Accept()
-          else:
-            # this is the SLR reduction rule: give A -> a., only reduce 
-            # if input is in FOLLOW(A)
-            for flw in ag.followTable[item.rule.left]:
-              if actionTable[idx].haskey(flw) and
-                  actionTable[idx][flw].kind == ActionTableItemKind.Shift:
-                # we cannot shift the End symbol, so this has to be TermS
-                nimyaccAssert flw.kind == SymbolKind.TermS, "bug, Shift(End) is not possible"
-
-                actionTable[idx][flw] = resolveShiftReduceConflict(item.rule, flw.term, g, actionTable[idx][flw].state)
-
-                if dctx.doGenDebugString:
-                  dctx.debugStr.add "SLR:Shift-Reduce CONFLICT!!!",idx, ":", flw
-                  dctx.debugStr.add "Conflict resolved in favor of ", actionTable[idx][flw]
-                inc cntSR 
-              elif actionTable[idx].haskey(flw) and
-                  actionTable[idx][flw].kind == ActionTableItemKind.Reduce:
-                if dctx.doGenDebugString:
-                  dctx.debugStr.add "SLR:Reduce-Reduce CONFLICT!!!", idx, ":", flw, ". This usually indicates a serious error in the grammar. Try unfactoring grammar to eliminate the conflict. As is, the first rule to get processed wins."
-                inc cntRR
-              elif actionTable[idx].haskey(sym) and
-                actionTable[idx][sym].kind == ActionTableItemKind.Error:
-                continue
-              else:
-                actionTable[idx][flw] = Reduce(item.rule)
-        _:
-          discard
-
-  if dctx.doGenDebugString:
-    dctx.debugStr.add g
-    dctx.debugStr.add cntSR, " shift-reduce conflict(s)"
-    dctx.debugStr.add cntRR, " reduce-reduce conflict(s)"
-    dctx.debugStr.add "=============================="
-    dctx.debugStr.add "SLR automaton"
-    for idx, itms in canonicalCollection:
-      dctx.debugStr.add "state ", idx 
-      dctx.debugStr.add lrItemsToString(itms, g, actionTable, gotoTable, idx)
-      dctx.debugStr.add "=============================="
-    dctx.debugStr.add actionTable
-    dctx.debugStr.add gotoTable
-
-  if dctx.doGenGraphViz:
-    var dg = emptyDotGraph()
-    for idx, itms in canonicalCollection:
-      populateDotGraph(dg, itms, g, actionTable, gotoTable, idx)
-    dctx.dotStr = dg.render()
-
-  result = ParsingTable(action: actionTable, goto: gotoTable)
 
 proc filterKernel*(cc: SetOfLRItems): SetOfLRItems =
   result = initOrderedSet[LRItems]()
