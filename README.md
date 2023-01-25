@@ -361,7 +361,7 @@ If you are not modifying yexe, then it should already be installed for you when 
 
 [lalr.nim](src/nimyacc/lalr.nim) contains logic to compute the lookahead propagation. 
 
-[parsegen.nim](src/nimyacc/parsegen.nim) contains the logic to handle the dsl, call yexe, and do codegen. 
+[parsegen.nim](src/nimyacc/parsegen.nim) contains the logic to handle the dsl, call yexe, and do codegen. When changing this logic, you can use -dnimydebug to trigger the printing of the generated code to iterate. Note that due to use of a generated macro, the printed code isn't the final expanded version. But if you want you can wrap the `nimy` macro in the `expandMacro` call and see the actual finally generated code (most of the lines should contain the ParsingTable object). 
 
 [debuginfo.nim](src/nimyacc/debuginfo.nim) contains logic to generate a debug or dot string from the parser automaton. 
 
