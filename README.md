@@ -10,8 +10,8 @@ The core algorithms (first/follow sets, canonical collection, lookahead propagat
 
 ## A list of features 
 * Support for bison style %left, %right, %nonassoc declarations, as well as rule level %prec declarations to use in conflict resolution. 
-* Output of debug string containing shift/conflict resolution info, the state machine itself, and the action and goto tables to the location specified by -d:nimydebug
-* Output of dot string of automaton to the location specified by -d:nimygraphviz. 
+* Output of debug string containing shift/conflict resolution info, the state machine itself, and the action and goto tables to the location specified by -d:nimydebug=<debug_file_path>
+* Output of dot string of automaton to the location specified by -d:nimygraphviz=<dot_file_path>
 * Error recovery using error symbol, similar to bison. This is the ad hoc error recovery using error token, as described in Modern Compiler Implementation in ML, p.76. I believe this is similar to what yacc/bison does. For another description of the algorithm, see the [python yacc clone PLY documentation](https://www.dabeaz.com/ply/ply.html#ply_nn29). 
 * Use [lexim](https://github.com/yuanweixin/lexim) which is a high performance scanner library that implements the dfa directly as a jump table, eliminating the overhead of table lookups. It supports lexer states for ease of handling common constructs such as comments and strings.  
 
