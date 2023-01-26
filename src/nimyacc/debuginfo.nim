@@ -47,16 +47,35 @@ proc `$`*(rule: Rule) : string =
     if i < rule.right.len-1:
       result.add " " 
 
-proc `$`*[T](pt: ParseTree[T], indent: int = 0): string =
+proc `$`*[T](pt: ParseTree[T], indent: int): string =
   match pt:
-    Terminal(token: t):
-      result = "  ".repeat(indent) & $t & "\n"
-    NonTerminal(rule: r, tree: t):
-      result = "  ".repeat(indent) & "rule: " & $r & "\n"
+    Terminal(token:t, tspos:spos, tepos:epos):
+      result.add "  ".repeat(indent) 
+      result.add $t
+      result.add " , ("
+      result.add $spos
+      result.add ", "
+      result.add $epos
+      result.add ")\n"
+    NonTerminal(rule:r, ntspos:spos, ntepos:epos, tree:t):
+      result = "  ".repeat(indent) 
+      result.add "rule: " 
+      result.add $r
+      result.add ", ("
+      result.add $spos
+      result.add ", "
+      result.add $epos
+      result.add ")\n"
       for n in t:
-        result = result & `$`(n, indent + 1)
-    ErrorNode():
-      result = " ".repeat(indent) & "errorNode\n"
+        result.add `$`(n, indent + 1)
+    ErrorNode(errpos: pos):
+      result = " ".repeat(indent)
+      result.add "errorNode, errpos="
+      result.add $pos
+      result.add "\n"
+
+proc `$`*[T](pt: ParseTree[T]): string = 
+  result = `$`(pt, 0)
 
 proc `$`*(i: ActionTableItem): string =
   match i:
@@ -184,7 +203,7 @@ func lalrItemGroupTokensToString(result: var string, g: Grammar, itms: LALRItems
     result.add separator
     rulePosToLookaheads.del((ruleIdx,i.pos)) 
 
-func populateActionString*(result: var string, at: var ActionTable, gt: var GotoTable, state: State) = 
+proc populateActionString*(result: var string, at: var ActionTable, gt: var GotoTable, state: State) = 
   if state in gt:
     for sym, gotoState in gt[state]:
       result.add $sym

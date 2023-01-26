@@ -88,6 +88,8 @@ type
       state*: State
     of ActionTableItemKind.Reduce:
       rule*: Rule
+    of ActionTableItemKind.Accept:
+      startRule*: Rule
     else:
       discard
 
@@ -108,9 +110,9 @@ type
     onEof*: proc (input:string, pos: int) {.closure.}
 
 variantp ParseTree[T]:
-  Terminal(token: T)
-  ErrorNode ## generated corresponding to error token. 
-  NonTerminal(rule: Rule, tree: seq[ParseTree[T]])
+  Terminal(token: T, tspos: int, tepos: int) # tspos, tepos = first, last char pos of token
+  ErrorNode(errpos: int) ## error token. errpos = pos where the offending token occurs 
+  NonTerminal(rule: Rule, ntspos: int, ntepos:int, tree: seq[ParseTree[T]]) ## ntspos, ntepos = leftmost, rightmost pos in this nonterminal. they can be the same if rhs derived empty.
 
 func rule*(i: LRItem) : Rule = 
   return i.g.rules[i.ruleIdx]
@@ -148,8 +150,8 @@ proc Shift*(state: State): ActionTableItem =
 proc Reduce*(rule: Rule): ActionTableItem =
   return ActionTableItem(kind: ActionTableItemKind.Reduce, rule: rule)
 
-proc Accept*(): ActionTableItem =
-  return ActionTableItem(kind: ActionTableItemKind.Accept)
+proc Accept*(rule: Rule): ActionTableItem =
+  return ActionTableItem(kind: ActionTableItemKind.Accept, startRule: rule)
 
 proc Error*(): ActionTableItem =
   return ActionTableItem(kind: ActionTableItemKind.Error)

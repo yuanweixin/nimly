@@ -108,6 +108,8 @@ If already at `Eof` or `Jammed`, future calls to `lexNext` will return `Eof` or 
 
 macro `nimy` generates the parsing table and the code to invoke the parser, at compile time. The generated code simply creates a proc that, when called, invokes the parser engine on the given input, and use the parser table to derive the parse tree. The parse tree is then traversed post-order. During the traversal, the user-specified code blocks are run. 
 
+### basic parser dsl 
+
 The dsl looks like this: 
 ```nim
 nimy testPar[MyToken]: # generates parse_testPar proc. 
@@ -147,7 +149,46 @@ nimy testPar[MyToken]:
     NUM:
       return ($1).val # extract the int value of the NUM token.
 ```
+### accessing symbol positions 
+Each grammar symbol's start and end positions can be accessed using this syntax. `nimyacctree` is of type `ParseTree[T]`. The name `nimyacctree` is available to user code. `getStartPos(i)` returns the start position of the ith grammar symbol, likewise for `getEndPos(i)` and the end position. `i` has the same range of values as the i in `$i`, i.e. i >= 1. 
 
+```nim
+nimy testPar[MyToken]:
+  top[seq[(int,int)]]:
+    plus:
+      let s = nimyacctree.getStartPos(1)
+      let e = nimyacctree.getEndPos(1)
+      return $1 & @[(s,e)]
+  plus[seq[(int,int)]]:
+    plus PLUS plus:
+      let s = nimyacctree.getStartPos(1)
+      let e = nimyacctree.getEndPos(3)
+      let ps = nimyacctree.getStartPos(2)
+      let pe = nimyacctree.getEndPos(2)
+      return $1 & @[(ps,pe)] & $3 & @[(s,e)]
+    mult:
+      let s = nimyacctree.getStartPos(1)
+      let e = nimyacctree.getEndPos(1)
+      return $1 & @[(s,e)]
+  mult[seq[(int,int)]]:
+    mult MULTI mult:
+      let mults = nimyacctree.getStartPos(2)
+      let multe = nimyacctree.getEndPos(2)
+      let s = nimyacctree.getStartPos(1)
+      let e = nimyacctree.getEndPos(3)
+      return $1 & @[(mults, multe)] & $3 & @[(s,e)]
+    num:
+      let s = nimyacctree.getStartPos(1)
+      let e = nimyacctree.getEndPos(1)
+      return $1 & @[(s,e)]
+  num[seq[(int,int)]]:
+    NUM:
+      let s = nimyacctree.getStartPos(1)
+      let e = nimyacctree.getEndPos(1)
+      return @[(s,e)]
+```
+
+### option and repetition 
 0 or 1 matches:
 
 The type is `seq[xxx]` where `xxx` is type of `XXX`.
@@ -173,7 +214,8 @@ nimy testRep[MyToken]:
         inc cnt
       return cnt
 ```
-Specifying precedence of tokens. Note using a fake token to override rule level precendence is also supported (UMINUS in this example).
+### Specifying precedence of tokens. 
+Note using a fake token to override rule level precendence is also supported (UMINUS in this example).
 ```nim
 nimy testPar[MyToken]:
   %left PLUS MINUS
@@ -197,6 +239,7 @@ nimy testPar[MyToken]:
     MINUS exp %prec UMINUS:
       return -($2)
 ```
+### error recovery 
 Here's an example of the use of the error symbol for error recovery. See [test case](tests/test_error_symbol.nim). 
 ```nim
 nimy testPar[MyToken]:

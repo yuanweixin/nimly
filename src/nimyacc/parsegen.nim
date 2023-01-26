@@ -227,11 +227,13 @@ proc replaceBody(body, param: NimNode,
       let index = int((body[1].intVal) - 1)
       # term
       if types[index] == "":
+        # this gives us the actual token object substituted for $n 
         result = quote do:
           `param`.tree[`index`].token
-      # nonterm
+      # nonterm or errornode
       else:
         let ruleToProc = nimyInfo[types[index]].ruleToProc
+        # this gives us the return type of whatever the user code block is
         result = quote do:
           `ruleToProc`[`param`.tree[`index`].rule](`param`.tree[`index`])
     else:
@@ -293,8 +295,9 @@ func actionTableItemToNimNode(ati: ActionTableItem) : NimNode =
     result = quote do:
       Reduce(`rn`)
   of ActionTableItemKind.Accept:
+    let rn = ruleToNimNode(ati.startRule)
     result = quote do:
-      Accept()
+      Accept(`rn`)
   of ActionTableItemKind.Error:
     result = quote do:
       Error()
@@ -676,11 +679,9 @@ proc validateRule(n : NimNode) =
       rest = rest[1]
     if not rest.validToken():
       failwith "invalid associativity declaration ", repr n 
-  of Call([BracketExpr([Ident(strVal: @lhs), @idOrNestedType is Ident()|BracketExpr()]), @rest is StmtList()]): # top[string] vs top[seq[string]]
+  of Call([BracketExpr([Ident(strVal: @lhs), _]), @rest is StmtList()]): # top[string] vs top[seq[string]]
     if lhs == "error":
       failwith "'error' is reserved for error symbol, cannot use it as a nonterminal, but got ", repr n
-    if idOrNestedType.kind == nnkBracketExpr and not idOrNestedType.validNestedTypeBracketExpr():
-      failwith "Invalid return type declaration in: ", repr n
     for ruleBody in rest:
       ruleBody.validateRuleBody()
   of Call([Ident(),.._]):
@@ -1009,6 +1010,5 @@ macro nimy*(head, body: untyped): untyped =
       if parser.hasError:
         return none[`returnType`]()
       return some `topProcId`(tree)
-  
   when defined(nimydebug):
     echo toStrLit(result)

@@ -42,9 +42,7 @@ export parsetypes.ParseTree
 export parsetypes.Parser
 export parsetypes.ParsingTable
 
-export parser.parseImpl
-export parser.newParser
-export parser.init
+export parser
 
 export slr.makeCanonicalCollection
 export slr.filterKernel

@@ -160,7 +160,7 @@ proc makeTableLALR*(g: Grammar, dctx: var DebugContext): ParsingTable =
           gotoTable[idx][sym] = tt[idx][sym]
         End:
           if itm.rule.left == ag.start:
-            actionTable[idx][End()] = Accept()
+            actionTable[idx][End()] = Accept(ag.startRule)
           else:
             if actionTable[idx].haskey(itm.ahead) and
                actionTable[idx][itm.ahead].kind == ActionTableItemKind.Shift:

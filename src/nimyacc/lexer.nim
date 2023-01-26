@@ -22,6 +22,9 @@ type
     else: 
       discard 
 
+proc startPos*[LS,T](l: NimlLexer[LS,T]) : int = 
+  return l.lexState.startPos
+
 proc `==`*[T](a,b: LexerOutput[T]) : bool = 
   if a.kind == b.kind:
     case a.kind 
