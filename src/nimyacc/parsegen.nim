@@ -392,7 +392,7 @@ proc tableMakerProc(parserName, tokenType, tokenKind, topNonTerm: NimNode,
       body.add quote do:
         try:
           `builderId`.addPrecAssoc(parseEnum[`tokenKind`](`tok`).ord, `prec`, Associativity(`assoc`))
-        except:
+        except CatchableError:
           echo "ignoring fake token kind ", `tok`, " for prec/assoc considerations in grammar construction"
   let yi = genSym(nskVar)
   body.add quote do:
@@ -656,14 +656,6 @@ proc validateRuleBody(n: NimNode) =
       failwith "invalid rule body ", repr n
   else:
     failwith "invalid rule body ", repr n 
-
-func validNestedTypeBracketExpr(n: NimNode) : bool = 
-  var nd = n 
-  while nd.kind == nnkBracketExpr:
-    if nd[0].kind != nnkIdent:
-      return false 
-    nd = nd[1]
-  return nd.kind == nnkIdent
 
 func validToken(n: NimNode) : bool = 
   return n.matches(Ident(strVal: != "error"))

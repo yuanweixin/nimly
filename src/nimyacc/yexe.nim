@@ -25,7 +25,7 @@ proc main(input:string) : string =
       writeFile(i.debugPath, dctx.debugStr)
     if i.doGenGraphViz:
       writeFile(i.dotPath, dctx.dotStr)
-  except Exception as e:
+  except CatchableError as e:
     res.hasError = true
     res.errMsg = e.msg
   echo $res.toJson()

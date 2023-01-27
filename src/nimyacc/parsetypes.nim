@@ -212,12 +212,6 @@ proc lenWithoutEmpty*(r: Rule): int =
     if s != Empty():
       inc(result)
 
-proc `[]`[T](os: OrderedSet[T], idx: int): T {.inline.} =
-  for i, key in os:
-    if i == idx:
-      return key
-  raise newException(Exception, "Index " & $idx & " not found")
-
 proc newRule*(prec: Option[Precedence], left: Symbol, right: varargs[Symbol]): Rule =
   result = Rule(left: left, right: right.toSeq, prec: prec)
 
